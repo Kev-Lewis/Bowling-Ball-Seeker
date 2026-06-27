@@ -18,6 +18,7 @@ import {
   scrapeBowlingComProductPage,
 } from "../scrapers/retailers/bowlingComScraper";
 import { getRecentSkippedMatchReviews } from "../services/retailerMatchReviewService";
+import { resolveRetailerListingMatch } from "../services/manualRetailerMatchService";
 
 export const retailerRoutes = Router();
 
@@ -447,6 +448,53 @@ retailerRoutes.get("/match-review/skipped", async (req, res) => {
 
     return res.status(500).json({
       error: "Failed to load skipped match reviews",
+      details: message,
+    });
+  }
+});
+
+retailerRoutes.get("/match-review/resolve", async (req, res) => {
+  try {
+    const ballId = req.query.ballId?.toString().trim();
+    const listingUrl = req.query.listingUrl?.toString().trim();
+    const rawMatchConfidence = Number(req.query.matchConfidence ?? 100);
+    const note = req.query.note?.toString().trim();
+
+    if (!ballId) {
+      return res.status(400).json({
+        error: "Missing required query parameter: ballId",
+      });
+    }
+
+    if (!listingUrl) {
+      return res.status(400).json({
+        error: "Missing required query parameter: listingUrl",
+      });
+    }
+
+    const result = await resolveRetailerListingMatch({
+      ballId,
+      listingUrl,
+      matchConfidence:
+        Number.isFinite(rawMatchConfidence) && rawMatchConfidence > 0
+          ? rawMatchConfidence
+          : 100,
+      note: note || undefined,
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown manual match resolve error";
+
+    return res.status(500).json({
+      error: "Failed to resolve retailer listing match",
       details: message,
     });
   }
