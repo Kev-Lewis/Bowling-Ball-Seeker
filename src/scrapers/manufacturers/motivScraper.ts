@@ -151,34 +151,36 @@ function inferCoverstockType(coverstockName: string | null): CoverstockType {
 function inferCoreType(
   coreName: string | null,
   headings: string[],
-  textBlocks: string[]
+  mbDifferential: number | null
 ): CoreType {
-  const searchableText = [...headings, ...textBlocks]
-    .map((value) => value.toLowerCase())
-    .join(" ");
-
   const normalizedCoreName = coreName?.toLowerCase() ?? "";
 
   if (normalizedCoreName) {
-    const matchingCoreText = [...headings, ...textBlocks]
-      .filter((value) => value.toLowerCase().includes(normalizedCoreName))
-      .join(" ")
-      .toLowerCase();
+    const matchingHeading = headings.find((heading) => {
+      return heading.toLowerCase().includes(normalizedCoreName);
+    });
 
-    if (matchingCoreText.includes("asym")) {
-      return "asymmetric";
-    }
+    if (matchingHeading) {
+      const normalizedHeading = matchingHeading.toLowerCase();
 
-    if (matchingCoreText.includes("sym")) {
-      return "symmetric";
+      if (normalizedHeading.includes("asym")) {
+        return "asymmetric";
+      }
+
+      if (
+        normalizedHeading.includes("symmetrical") ||
+        normalizedHeading.includes("symmetric")
+      ) {
+        return "symmetric";
+      }
     }
   }
 
-  if (searchableText.includes("asym")) {
+  if (mbDifferential !== null && mbDifferential > 0) {
     return "asymmetric";
   }
 
-  if (searchableText.includes("symmetrical") || searchableText.includes("symmetric")) {
+  if (mbDifferential === null || mbDifferential === 0) {
     return "symmetric";
   }
 
@@ -361,7 +363,11 @@ export async function parseMotivBallPage(
     coverstockName,
     coverstockType: inferCoverstockType(coverstockName),
     coreName,
-    coreType: inferCoreType(coreName, inspection.headings, inspection.textBlocks),
+    coreType: inferCoreType(
+        coreName,
+        inspection.headings,
+        referenceSpec?.mbDifferential ?? null
+    ),
     factoryFinish,
     rg: referenceSpec?.rg ?? null,
     differential: referenceSpec?.differential ?? null,
