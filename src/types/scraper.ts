@@ -11,3 +11,23 @@ export interface ProductDiscoveryResult {
   count: number;
   data: DiscoveredProductLink[];
 }
+
+export interface PageTableRow {
+  cells: string[];
+}
+
+export interface PageImageCandidate {
+  src: string;
+  alt: string;
+}
+
+export interface PageInspectionResult {
+  sourceName: string;
+  url: string;
+  checkedAt: string;
+  title: string | null;
+  headings: string[];
+  textBlocks: string[];
+  tableRows: PageTableRow[];
+  imageCandidates: PageImageCandidate[];
+}
