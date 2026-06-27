@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "crypto";
+import crypto from "crypto";
 import { prisma } from "../db/prisma";
 import type {
   ListingCondition,
@@ -19,134 +19,146 @@ export interface RetailerListingInput {
   matchStatus: MatchStatus;
   currentPrice: number;
   stockStatus: StockStatus;
-  checkedAt?: Date;
   recordUnchangedSnapshot?: boolean;
 }
 
-function normalizeUrl(url: string) {
-  return url.trim();
-}
-
 function buildRetailerListingId(retailerName: string, listingUrl: string) {
-  const normalizedKey = `${retailerName.toLowerCase().trim()}::${normalizeUrl(
-    listingUrl
-  ).toLowerCase()}`;
+  const normalizedRetailerName = retailerName.trim().toLowerCase();
+  const normalizedListingUrl = listingUrl.trim().toLowerCase();
 
-  const hash = createHash("sha256").update(normalizedKey).digest("hex").slice(0, 16);
+  const hash = crypto
+    .createHash("sha256")
+    .update(`${normalizedRetailerName}::${normalizedListingUrl}`)
+    .digest("hex")
+    .slice(0, 16);
 
   return `listing-${hash}`;
+}
+
+function shouldProtectManualMatch(
+  existingMatchStatus: string | null | undefined,
+  incomingMatchStatus: MatchStatus
+) {
+  return (
+    existingMatchStatus === "manually_matched" &&
+    incomingMatchStatus !== "manually_matched"
+  );
 }
 
 export async function upsertRetailerListingWithSnapshot(
   input: RetailerListingInput
 ) {
-  const checkedAt = input.checkedAt ?? new Date();
-  const listingId = buildRetailerListingId(input.retailerName, input.listingUrl);
+  const listingId = buildRetailerListingId(
+    input.retailerName,
+    input.listingUrl
+  );
 
-  const ball = await prisma.ball.findUnique({
+  const checkedAt = new Date();
+
+  const existingListing = await prisma.retailerListing.findUnique({
     where: {
-      id: input.ballId,
+      id: listingId,
     },
   });
 
-  if (!ball) {
-    throw new Error(`No ball found with id: ${input.ballId}`);
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    const existingListing = await tx.retailerListing.findUnique({
-      where: {
-        id: listingId,
-      },
-    });
-
-    const latestSnapshot = existingListing
-      ? await tx.priceSnapshot.findFirst({
-          where: {
-            retailerListingId: listingId,
-          },
-          orderBy: {
-            checkedAt: "desc",
-          },
-        })
-      : null;
-
-    const listing = existingListing
-      ? await tx.retailerListing.update({
-          where: {
-            id: listingId,
-          },
-          data: {
-            ballId: input.ballId,
-            retailerName: input.retailerName,
-            retailerType: input.retailerType,
-            listingTitle: input.listingTitle,
-            listingUrl: normalizeUrl(input.listingUrl),
-            condition: input.condition,
-            matchConfidence: input.matchConfidence,
-            matchStatus: input.matchStatus,
-            currentPrice: input.currentPrice,
-            stockStatus: input.stockStatus,
-            lastCheckedAt: checkedAt,
-          },
-        })
-      : await tx.retailerListing.create({
-          data: {
-            id: listingId,
-            ballId: input.ballId,
-            retailerName: input.retailerName,
-            retailerType: input.retailerType,
-            listingTitle: input.listingTitle,
-            listingUrl: normalizeUrl(input.listingUrl),
-            condition: input.condition,
-            matchConfidence: input.matchConfidence,
-            matchStatus: input.matchStatus,
-            currentPrice: input.currentPrice,
-            stockStatus: input.stockStatus,
-            lastCheckedAt: checkedAt,
-          },
-        });
-
-    const priceChanged =
-      !latestSnapshot || latestSnapshot.price !== input.currentPrice;
-
-    const stockChanged =
-      !latestSnapshot || latestSnapshot.stockStatus !== input.stockStatus;
-
-    const shouldCreateSnapshot =
-      !existingListing ||
-      priceChanged ||
-      stockChanged ||
-      input.recordUnchangedSnapshot === true;
-
-    if (!shouldCreateSnapshot) {
-      return {
-        action: existingListing ? "updated" : "created",
-        snapshotAction: "skipped_unchanged",
-        listing,
-        priceSnapshot: null,
-      };
-    }
-
-    const priceSnapshot = await tx.priceSnapshot.create({
-      data: {
-        id: randomUUID(),
-        retailerListingId: listing.id,
-        price: input.currentPrice,
-        stockStatus: input.stockStatus,
-        checkedAt,
-      },
-    });
-
-    return {
-      action: existingListing ? "updated" : "created",
-      snapshotAction: "created",
-      listing,
-      priceSnapshot,
-    };
+  const latestSnapshot = await prisma.priceSnapshot.findFirst({
+    where: {
+      retailerListingId: listingId,
+    },
+    orderBy: {
+      checkedAt: "desc",
+    },
   });
 
-  return result;
+  const manualMatchProtected = shouldProtectManualMatch(
+    existingListing?.matchStatus,
+    input.matchStatus
+  );
+
+  const protectedBallId = manualMatchProtected
+    ? existingListing?.ballId ?? input.ballId
+    : input.ballId;
+
+  const protectedMatchConfidence = manualMatchProtected
+    ? existingListing?.matchConfidence ?? input.matchConfidence
+    : input.matchConfidence;
+
+  const protectedMatchStatus = manualMatchProtected
+    ? existingListing?.matchStatus ?? input.matchStatus
+    : input.matchStatus;
+
+  const listing = await prisma.retailerListing.upsert({
+    where: {
+      id: listingId,
+    },
+    create: {
+      id: listingId,
+      ballId: input.ballId,
+      retailerName: input.retailerName,
+      retailerType: input.retailerType,
+      listingTitle: input.listingTitle,
+      listingUrl: input.listingUrl,
+      condition: input.condition,
+      matchConfidence: input.matchConfidence,
+      matchStatus: input.matchStatus,
+      currentPrice: input.currentPrice,
+      stockStatus: input.stockStatus,
+      lastCheckedAt: checkedAt,
+    },
+    update: {
+      ballId: protectedBallId,
+      retailerName: input.retailerName,
+      retailerType: input.retailerType,
+      listingTitle: input.listingTitle,
+      listingUrl: input.listingUrl,
+      condition: input.condition,
+      matchConfidence: protectedMatchConfidence,
+      matchStatus: protectedMatchStatus,
+      currentPrice: input.currentPrice,
+      stockStatus: input.stockStatus,
+      lastCheckedAt: checkedAt,
+    },
+  });
+
+  const priceChanged =
+    !latestSnapshot || latestSnapshot.price !== input.currentPrice;
+
+  const stockChanged =
+    !latestSnapshot || latestSnapshot.stockStatus !== input.stockStatus;
+
+  const shouldCreateSnapshot =
+    !existingListing ||
+    priceChanged ||
+    stockChanged ||
+    input.recordUnchangedSnapshot === true;
+
+  if (!shouldCreateSnapshot) {
+    return {
+      action: existingListing ? "updated" : "created",
+      snapshotAction: "skipped_unchanged",
+      manualMatchProtected,
+      listing,
+      priceSnapshot: null,
+    };
+  }
+
+  const priceSnapshot = await prisma.priceSnapshot.create({
+    data: {
+      id: crypto.randomUUID(),
+      retailerListingId: listing.id,
+      price: input.currentPrice,
+      stockStatus: input.stockStatus,
+      checkedAt,
+    },
+  });
+
+  return {
+    action: existingListing ? "updated" : "created",
+    snapshotAction: "created",
+    manualMatchProtected,
+    listing,
+    priceSnapshot,
+  };
 }
 
 export async function getRetailerListingsForBall(ballId: string) {
@@ -154,22 +166,22 @@ export async function getRetailerListingsForBall(ballId: string) {
     where: {
       ballId,
     },
-    include: {
-      priceHistory: {
-        orderBy: {
-          checkedAt: "desc",
-        },
-        take: 10,
-      },
-    },
     orderBy: [
       {
-        retailerType: "asc",
+        retailerName: "asc",
       },
       {
         currentPrice: "asc",
       },
     ],
+    include: {
+      priceHistory: {
+        orderBy: {
+          checkedAt: "desc",
+        },
+        take: 20,
+      },
+    },
   });
 
   return {
