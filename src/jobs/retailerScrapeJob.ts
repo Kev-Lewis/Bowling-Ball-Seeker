@@ -1,5 +1,12 @@
+import {
+  scrapeBowlingComCategoryPages,
+  scrapeBowlingComProductPage,
+} from "../scrapers/retailers/bowlingComScraper";
 import { scrapeMockRetailerListings } from "../scrapers/retailers/mockRetailerScraper";
-import { matchRetailerListingTitle } from "../services/listingMatchService";
+import {
+  matchRetailerListingTitle,
+  type ListingMatchCandidate,
+} from "../services/listingMatchService";
 import { upsertRetailerListingWithSnapshot } from "../services/retailerListingService";
 import {
   completeScrapeRun,
@@ -7,10 +14,6 @@ import {
   startScrapeRun,
 } from "../services/scrapeRunService";
 import type { ScrapedRetailerListing } from "../types/retailerScraper";
-import {
-  scrapeBowlingComCategoryPages,
-  scrapeBowlingComProductPage,
-} from "../scrapers/retailers/bowlingComScraper";
 
 export interface RetailerScrapeJobOptions {
   allowLikelyMatch?: boolean;
@@ -80,6 +83,107 @@ async function processScrapedRetailerListing(
   };
 }
 
+type RetailerScrapeProcessingResult = Awaited<
+  ReturnType<typeof processScrapedRetailerListing>
+>;
+
+function summarizeMatchCandidate(candidate: ListingMatchCandidate) {
+  return {
+    ballId: candidate.ballId,
+    canonicalName: candidate.canonicalName,
+    brand: candidate.brand,
+    manufacturer: candidate.manufacturer,
+    confidence: candidate.confidence,
+    matchStatus: candidate.matchStatus,
+    reasons: candidate.reasons,
+  };
+}
+
+function buildSkippedListingReviews(
+  results: RetailerScrapeProcessingResult[]
+) {
+  return results
+    .filter((result) => {
+      return (
+        result.status === "skipped_no_match" ||
+        result.status === "skipped_needs_review"
+      );
+    })
+    .map((result) => {
+      const selectedMatch =
+        "selectedMatch" in result && result.selectedMatch
+          ? summarizeMatchCandidate(result.selectedMatch)
+          : null;
+
+      return {
+        status: result.status,
+        listing: {
+          retailerName: result.listing.retailerName,
+          listingTitle: result.listing.listingTitle,
+          listingUrl: result.listing.listingUrl,
+          currentPrice: result.listing.currentPrice,
+          stockStatus: result.listing.stockStatus,
+          condition: result.listing.condition,
+        },
+        selectedMatch,
+        matchCount: result.matches.length,
+        topMatches: result.matches.slice(0, 5).map((match) => {
+          return summarizeMatchCandidate(match);
+        }),
+      };
+    });
+}
+
+function countSavedResults(results: RetailerScrapeProcessingResult[]) {
+  return results.filter((result) => {
+    return result.status === "saved";
+  }).length;
+}
+
+function countSkippedNoMatchResults(results: RetailerScrapeProcessingResult[]) {
+  return results.filter((result) => {
+    return result.status === "skipped_no_match";
+  }).length;
+}
+
+function countSkippedNeedsReviewResults(
+  results: RetailerScrapeProcessingResult[]
+) {
+  return results.filter((result) => {
+    return result.status === "skipped_needs_review";
+  }).length;
+}
+
+function countCreatedListings(results: RetailerScrapeProcessingResult[]) {
+  return results.filter((result) => {
+    return result.status === "saved" && result.upsert?.action === "created";
+  }).length;
+}
+
+function countUpdatedListings(results: RetailerScrapeProcessingResult[]) {
+  return results.filter((result) => {
+    return result.status === "saved" && result.upsert?.action === "updated";
+  }).length;
+}
+
+function countCreatedSnapshots(results: RetailerScrapeProcessingResult[]) {
+  return results.filter((result) => {
+    return (
+      result.status === "saved" &&
+      result.upsert?.snapshotAction === "created"
+    );
+  }).length;
+}
+
+function countSkippedSnapshots(results: RetailerScrapeProcessingResult[]) {
+  return results.filter((result) => {
+    return (
+      result.status === "saved" &&
+      result.upsert?.snapshotAction === "skipped_unchanged"
+    );
+  }).length;
+}
+
 export async function runMockRetailerScrapeJob(
   options: RetailerScrapeJobOptions = {}
 ) {
@@ -98,46 +202,21 @@ export async function runMockRetailerScrapeJob(
   try {
     const scrapeResult = await scrapeMockRetailerListings();
 
-    const results = [];
+    const results: RetailerScrapeProcessingResult[] = [];
 
     for (const listing of scrapeResult.data) {
       const result = await processScrapedRetailerListing(listing, options);
       results.push(result);
     }
 
-    const savedCount = results.filter((result) => {
-      return result.status === "saved";
-    }).length;
-
-    const skippedNoMatchCount = results.filter((result) => {
-      return result.status === "skipped_no_match";
-    }).length;
-
-    const skippedNeedsReviewCount = results.filter((result) => {
-      return result.status === "skipped_needs_review";
-    }).length;
-
-    const createdListingCount = results.filter((result) => {
-      return result.status === "saved" && result.upsert?.action === "created";
-    }).length;
-
-    const updatedListingCount = results.filter((result) => {
-      return result.status === "saved" && result.upsert?.action === "updated";
-    }).length;
-
-    const snapshotCreatedCount = results.filter((result) => {
-      return (
-        result.status === "saved" &&
-        result.upsert?.snapshotAction === "created"
-      );
-    }).length;
-
-    const snapshotSkippedCount = results.filter((result) => {
-      return (
-        result.status === "saved" &&
-        result.upsert?.snapshotAction === "skipped_unchanged"
-      );
-    }).length;
+    const savedCount = countSavedResults(results);
+    const skippedNoMatchCount = countSkippedNoMatchResults(results);
+    const skippedNeedsReviewCount = countSkippedNeedsReviewResults(results);
+    const createdListingCount = countCreatedListings(results);
+    const updatedListingCount = countUpdatedListings(results);
+    const snapshotCreatedCount = countCreatedSnapshots(results);
+    const snapshotSkippedCount = countSkippedSnapshots(results);
+    const skippedListingReviews = buildSkippedListingReviews(results);
 
     const jobResult = {
       jobName: "mock_retailer_scrape_job",
@@ -154,6 +233,7 @@ export async function runMockRetailerScrapeJob(
       updatedListingCount,
       snapshotCreatedCount,
       snapshotSkippedCount,
+      skippedListingReviews,
       results,
     };
 
@@ -172,6 +252,7 @@ export async function runMockRetailerScrapeJob(
         updatedListingCount,
         snapshotCreatedCount,
         snapshotSkippedCount,
+        skippedListingReviews,
       },
     });
 
@@ -208,53 +289,28 @@ export async function runBowlingComProductScrapeJob(
   });
 
   try {
-    const scrapedListings = [];
+    const scrapedListings: ScrapedRetailerListing[] = [];
 
     for (const url of urls) {
       const listing = await scrapeBowlingComProductPage(url);
       scrapedListings.push(listing);
     }
 
-    const results = [];
+    const results: RetailerScrapeProcessingResult[] = [];
 
     for (const listing of scrapedListings) {
       const result = await processScrapedRetailerListing(listing, options);
       results.push(result);
     }
 
-    const savedCount = results.filter((result) => {
-      return result.status === "saved";
-    }).length;
-
-    const skippedNoMatchCount = results.filter((result) => {
-      return result.status === "skipped_no_match";
-    }).length;
-
-    const skippedNeedsReviewCount = results.filter((result) => {
-      return result.status === "skipped_needs_review";
-    }).length;
-
-    const createdListingCount = results.filter((result) => {
-      return result.status === "saved" && result.upsert?.action === "created";
-    }).length;
-
-    const updatedListingCount = results.filter((result) => {
-      return result.status === "saved" && result.upsert?.action === "updated";
-    }).length;
-
-    const snapshotCreatedCount = results.filter((result) => {
-      return (
-        result.status === "saved" &&
-        result.upsert?.snapshotAction === "created"
-      );
-    }).length;
-
-    const snapshotSkippedCount = results.filter((result) => {
-      return (
-        result.status === "saved" &&
-        result.upsert?.snapshotAction === "skipped_unchanged"
-      );
-    }).length;
+    const savedCount = countSavedResults(results);
+    const skippedNoMatchCount = countSkippedNoMatchResults(results);
+    const skippedNeedsReviewCount = countSkippedNeedsReviewResults(results);
+    const createdListingCount = countCreatedListings(results);
+    const updatedListingCount = countUpdatedListings(results);
+    const snapshotCreatedCount = countCreatedSnapshots(results);
+    const snapshotSkippedCount = countSkippedSnapshots(results);
+    const skippedListingReviews = buildSkippedListingReviews(results);
 
     const jobResult = {
       jobName: "bowling_com_product_scrape_job",
@@ -271,6 +327,7 @@ export async function runBowlingComProductScrapeJob(
       updatedListingCount,
       snapshotCreatedCount,
       snapshotSkippedCount,
+      skippedListingReviews,
       results,
     };
 
@@ -289,6 +346,7 @@ export async function runBowlingComProductScrapeJob(
         updatedListingCount,
         snapshotCreatedCount,
         snapshotSkippedCount,
+        skippedListingReviews,
       },
     });
 
@@ -338,53 +396,28 @@ export async function runBowlingComCategoryScrapeJob(
     });
 
     const productCandidates = categoryResult.data.slice(0, maxProducts);
-    const scrapedListings = [];
+    const scrapedListings: ScrapedRetailerListing[] = [];
 
     for (const product of productCandidates) {
       const listing = await scrapeBowlingComProductPage(product.url);
       scrapedListings.push(listing);
     }
 
-    const results = [];
+    const results: RetailerScrapeProcessingResult[] = [];
 
     for (const listing of scrapedListings) {
       const result = await processScrapedRetailerListing(listing, options);
       results.push(result);
     }
 
-    const savedCount = results.filter((result) => {
-      return result.status === "saved";
-    }).length;
-
-    const skippedNoMatchCount = results.filter((result) => {
-      return result.status === "skipped_no_match";
-    }).length;
-
-    const skippedNeedsReviewCount = results.filter((result) => {
-      return result.status === "skipped_needs_review";
-    }).length;
-
-    const createdListingCount = results.filter((result) => {
-      return result.status === "saved" && result.upsert?.action === "created";
-    }).length;
-
-    const updatedListingCount = results.filter((result) => {
-      return result.status === "saved" && result.upsert?.action === "updated";
-    }).length;
-
-    const snapshotCreatedCount = results.filter((result) => {
-      return (
-        result.status === "saved" &&
-        result.upsert?.snapshotAction === "created"
-      );
-    }).length;
-
-    const snapshotSkippedCount = results.filter((result) => {
-      return (
-        result.status === "saved" &&
-        result.upsert?.snapshotAction === "skipped_unchanged"
-      );
-    }).length;
+    const savedCount = countSavedResults(results);
+    const skippedNoMatchCount = countSkippedNoMatchResults(results);
+    const skippedNeedsReviewCount = countSkippedNeedsReviewResults(results);
+    const createdListingCount = countCreatedListings(results);
+    const updatedListingCount = countUpdatedListings(results);
+    const snapshotCreatedCount = countCreatedSnapshots(results);
+    const snapshotSkippedCount = countSkippedSnapshots(results);
+    const skippedListingReviews = buildSkippedListingReviews(results);
 
     const jobResult = {
       jobName: "bowling_com_category_scrape_job",
@@ -403,6 +436,7 @@ export async function runBowlingComCategoryScrapeJob(
       updatedListingCount,
       snapshotCreatedCount,
       snapshotSkippedCount,
+      skippedListingReviews,
       categoryPages: categoryResult.pages,
       scrapedProductUrls: productCandidates.map((product) => product.url),
       results,
@@ -428,6 +462,7 @@ export async function runBowlingComCategoryScrapeJob(
         updatedListingCount,
         snapshotCreatedCount,
         snapshotSkippedCount,
+        skippedListingReviews,
       },
     });
 

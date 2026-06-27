@@ -17,6 +17,7 @@ import {
   scrapeBowlingComCategoryPages,
   scrapeBowlingComProductPage,
 } from "../scrapers/retailers/bowlingComScraper";
+import { getRecentSkippedMatchReviews } from "../services/retailerMatchReviewService";
 
 export const retailerRoutes = Router();
 
@@ -418,6 +419,34 @@ retailerRoutes.get("/balls/:ballId/price-summary", async (req, res) => {
 
     return res.status(statusCode).json({
       error: "Failed to fetch ball price summary",
+      details: message,
+    });
+  }
+});
+
+retailerRoutes.get("/match-review/skipped", async (req, res) => {
+  try {
+    const rawLimit = Number(req.query.limit ?? 50);
+    const sourceName = req.query.sourceName?.toString().trim();
+
+    const result = await getRecentSkippedMatchReviews({
+      limit: Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50,
+      sourceName: sourceName || undefined,
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown match review lookup error";
+
+    return res.status(500).json({
+      error: "Failed to load skipped match reviews",
       details: message,
     });
   }
