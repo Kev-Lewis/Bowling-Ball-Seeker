@@ -1,6 +1,6 @@
 # Bowling Ball Seeker
 
-Bowling Ball Seeker is a U.S.-focused bowling ball price tracking platform.
+Bowling Ball Seeker is a U.S. focused bowling ball price tracking platform.
 
 The project tracks currently available bowling balls from official manufacturer websites, monitors trusted retailers and marketplaces for pricing, stores daily price history, detects ball lineup changes, and will support Discord bot commands and alerts.
 
