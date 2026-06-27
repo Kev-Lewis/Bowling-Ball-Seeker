@@ -62,7 +62,7 @@ export async function resolveRetailerListingMatch(
     listingUrl: listing.listingUrl,
     condition: listing.condition,
     matchConfidence,
-    matchStatus: "manual_review" as const,
+    matchStatus: "manually_matched" as const,
     currentPrice: listing.currentPrice,
     stockStatus: listing.stockStatus,
   };

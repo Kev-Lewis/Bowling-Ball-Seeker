@@ -42,6 +42,7 @@ export type MatchStatus =
   | "auto_matched"
   | "likely_match"
   | "manual_review"
+  | "manually_matched"
   | "rejected";
 
 export interface RetailerListing {
