@@ -11,6 +11,7 @@ import type {
 } from "../types/ball";
 import { matchRetailerListingTitle } from "../services/listingMatchService";
 import { getBallPriceSummary } from "../services/ballPriceSummaryService";
+import { inspectRetailerPage } from "../scrapers/retailers/retailerInspector";
 
 export const retailerRoutes = Router();
 
@@ -78,6 +79,28 @@ function getBooleanQuery(value: unknown, fallback = false) {
 
   return fallback;
 }
+
+retailerRoutes.get("/inspect-page", async (req, res) => {
+  try {
+    const url = getRequiredString(req.query.url, "url");
+
+    const result = await inspectRetailerPage(url);
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error ? error.message : "Unknown retailer inspection error";
+
+    return res.status(400).json({
+      error: "Failed to inspect retailer page",
+      details: message,
+    });
+  }
+});
 
 retailerRoutes.get("/match-listing", async (req, res) => {
   try {
