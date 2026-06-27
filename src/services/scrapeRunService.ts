@@ -102,3 +102,67 @@ export async function getScrapeRunsBySourceType(sourceType: string, limit = 50) 
     },
   });
 }
+
+export async function getLatestScrapeRunForSource(
+  sourceName: string,
+  sourceType?: string
+) {
+  return prisma.scrapeRun.findFirst({
+    where: {
+      sourceName,
+      ...(sourceType ? { sourceType } : {}),
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+  });
+}
+
+export async function getLatestScrapeRunsBySource(sourceType?: string) {
+  const runs = await prisma.scrapeRun.findMany({
+    where: {
+      ...(sourceType ? { sourceType } : {}),
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+  });
+
+  const latestBySource = new Map<string, (typeof runs)[number]>();
+
+  for (const run of runs) {
+    const key = `${run.sourceName}:${run.sourceType}`;
+
+    if (!latestBySource.has(key)) {
+      latestBySource.set(key, run);
+    }
+  }
+
+  return Array.from(latestBySource.values()).sort((a, b) => {
+    return a.sourceName.localeCompare(b.sourceName);
+  });
+}
+
+export async function getManufacturerCatalogSyncStatus() {
+  const latestRuns = await getLatestScrapeRunsBySource(
+    "manufacturer_catalog_live_sync"
+  );
+
+  return {
+    sourceType: "manufacturer_catalog_live_sync",
+    count: latestRuns.length,
+    data: latestRuns.map((run) => ({
+      sourceName: run.sourceName,
+      status: run.status,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      itemsFound: run.itemsFound,
+      itemsCreated: run.itemsCreated,
+      itemsUpdated: run.itemsUpdated,
+      itemsRemoved: run.itemsRemoved,
+      errorMessage: run.errorMessage,
+      metadataJson: run.metadataJson,
+    })),
+    generatedAt: new Date().toISOString(),
+  };
+}
