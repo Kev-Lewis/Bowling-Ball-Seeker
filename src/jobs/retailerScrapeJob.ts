@@ -7,6 +7,7 @@ import {
   startScrapeRun,
 } from "../services/scrapeRunService";
 import type { ScrapedRetailerListing } from "../types/retailerScraper";
+import { scrapeBowlingComProductPage } from "../scrapers/retailers/bowlingComScraper";
 
 export interface RetailerScrapeJobOptions {
   allowLikelyMatch?: boolean;
@@ -172,6 +173,126 @@ export async function runMockRetailerScrapeJob(
 
     await failScrapeRun(scrapeRun.id, message, {
       mode: "mock",
+      allowLikelyMatch: options.allowLikelyMatch ?? false,
+      minConfidence: options.minConfidence ?? 35,
+    });
+
+    throw error;
+  }
+}
+
+export async function runBowlingComProductScrapeJob(
+  urls: string[],
+  options: RetailerScrapeJobOptions = {}
+) {
+  const startedAt = new Date().toISOString();
+
+  const scrapeRun = await startScrapeRun({
+    sourceName: "bowling.com",
+    sourceType: "retailer_price_scrape",
+    metadata: {
+      mode: "bowling_com_product_pages",
+      urls,
+      allowLikelyMatch: options.allowLikelyMatch ?? false,
+      minConfidence: options.minConfidence ?? 35,
+    },
+  });
+
+  try {
+    const scrapedListings = [];
+
+    for (const url of urls) {
+      const listing = await scrapeBowlingComProductPage(url);
+      scrapedListings.push(listing);
+    }
+
+    const results = [];
+
+    for (const listing of scrapedListings) {
+      const result = await processScrapedRetailerListing(listing, options);
+      results.push(result);
+    }
+
+    const savedCount = results.filter((result) => {
+      return result.status === "saved";
+    }).length;
+
+    const skippedNoMatchCount = results.filter((result) => {
+      return result.status === "skipped_no_match";
+    }).length;
+
+    const skippedNeedsReviewCount = results.filter((result) => {
+      return result.status === "skipped_needs_review";
+    }).length;
+
+    const createdListingCount = results.filter((result) => {
+      return result.status === "saved" && result.upsert?.action === "created";
+    }).length;
+
+    const updatedListingCount = results.filter((result) => {
+      return result.status === "saved" && result.upsert?.action === "updated";
+    }).length;
+
+    const snapshotCreatedCount = results.filter((result) => {
+      return (
+        result.status === "saved" &&
+        result.upsert?.snapshotAction === "created"
+      );
+    }).length;
+
+    const snapshotSkippedCount = results.filter((result) => {
+      return (
+        result.status === "saved" &&
+        result.upsert?.snapshotAction === "skipped_unchanged"
+      );
+    }).length;
+
+    const jobResult = {
+      jobName: "bowling_com_product_scrape_job",
+      scrapeRunId: scrapeRun.id,
+      sourceName: "bowling.com",
+      sourceUrl: "https://www.bowling.com/",
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      scrapedCount: scrapedListings.length,
+      savedCount,
+      skippedNoMatchCount,
+      skippedNeedsReviewCount,
+      createdListingCount,
+      updatedListingCount,
+      snapshotCreatedCount,
+      snapshotSkippedCount,
+      results,
+    };
+
+    await completeScrapeRun(scrapeRun.id, {
+      itemsFound: scrapedListings.length,
+      itemsCreated: createdListingCount + snapshotCreatedCount,
+      itemsUpdated: updatedListingCount,
+      itemsRemoved: 0,
+      metadata: {
+        mode: "bowling_com_product_pages",
+        urls,
+        savedCount,
+        skippedNoMatchCount,
+        skippedNeedsReviewCount,
+        createdListingCount,
+        updatedListingCount,
+        snapshotCreatedCount,
+        snapshotSkippedCount,
+      },
+    });
+
+    return jobResult;
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown Bowling.com product scrape error";
+
+    await failScrapeRun(scrapeRun.id, message, {
+      mode: "bowling_com_product_pages",
+      urls,
       allowLikelyMatch: options.allowLikelyMatch ?? false,
       minConfidence: options.minConfidence ?? 35,
     });

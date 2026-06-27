@@ -3,7 +3,10 @@ import { runDailyManufacturerSync } from "../jobs/manufacturerSyncJob";
 import { getLocalSchedulerStatus } from "../scheduler/localScheduler";
 import { runPriceAlertJob } from "../jobs/priceAlertJob";
 import { runDailySystemJob } from "../jobs/dailyJob";
-import { runMockRetailerScrapeJob } from "../jobs/retailerScrapeJob";
+import {
+  runBowlingComProductScrapeJob,
+  runMockRetailerScrapeJob,
+} from "../jobs/retailerScrapeJob";
 
 export const jobRoutes = Router();
 
@@ -210,6 +213,42 @@ jobRoutes.get("/mock-retailer-scrape/run", async (req, res) => {
 
     return res.status(500).json({
       error: "Failed to run mock retailer scrape job",
+      details: message,
+    });
+  }
+});
+
+jobRoutes.get("/bowling-com-product-scrape/run", async (req, res) => {
+  try {
+    const rawUrl = req.query.url?.toString().trim();
+
+    if (!rawUrl) {
+      return res.status(400).json({
+        error: "Missing required query parameter: url",
+      });
+    }
+
+    const allowLikelyMatch = getBooleanQuery(req.query.allowLikelyMatch, true);
+    const minConfidence = getNumberQuery(req.query.minConfidence, 35);
+
+    const result = await runBowlingComProductScrapeJob([rawUrl], {
+      allowLikelyMatch,
+      minConfidence,
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown Bowling.com product scrape job error";
+
+    return res.status(500).json({
+      error: "Failed to run Bowling.com product scrape job",
       details: message,
     });
   }
