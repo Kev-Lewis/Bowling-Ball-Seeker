@@ -10,6 +10,7 @@ import type {
   RetailerType,
 } from "../types/ball";
 import { matchRetailerListingTitle } from "../services/listingMatchService";
+import { getBallPriceSummary } from "../services/ballPriceSummaryService";
 
 export const retailerRoutes = Router();
 
@@ -293,6 +294,28 @@ retailerRoutes.get("/balls/:ballId/listings", async (req, res) => {
 
     return res.status(500).json({
       error: "Failed to fetch retailer listings for ball",
+    });
+  }
+});
+
+retailerRoutes.get("/balls/:ballId/price-summary", async (req, res) => {
+  try {
+    const result = await getBallPriceSummary(req.params.ballId);
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error ? error.message : "Unknown price summary error";
+
+    const statusCode = message.startsWith("No ball found") ? 404 : 500;
+
+    return res.status(statusCode).json({
+      error: "Failed to fetch ball price summary",
+      details: message,
     });
   }
 });
