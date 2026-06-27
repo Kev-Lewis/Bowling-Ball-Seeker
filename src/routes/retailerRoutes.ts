@@ -430,10 +430,25 @@ retailerRoutes.get("/match-review/skipped", async (req, res) => {
   try {
     const rawLimit = Number(req.query.limit ?? 50);
     const sourceName = req.query.sourceName?.toString().trim();
+    const rawStatus = req.query.status?.toString().trim();
+
+    const status =
+      rawStatus === "skipped_no_match" ||
+      rawStatus === "skipped_needs_review"
+        ? rawStatus
+        : undefined;
+
+    if (rawStatus && !status) {
+      return res.status(400).json({
+        error:
+          "Invalid status. Use skipped_no_match or skipped_needs_review.",
+      });
+    }
 
     const result = await getRecentSkippedMatchReviews({
       limit: Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50,
       sourceName: sourceName || undefined,
+      status,
     });
 
     return res.json({

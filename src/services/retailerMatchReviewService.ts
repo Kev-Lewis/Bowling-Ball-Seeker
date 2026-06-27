@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma";
 export interface RecentSkippedMatchReviewOptions {
   limit?: number;
   sourceName?: string;
+  status?: "skipped_no_match" | "skipped_needs_review";
 }
 
 function parseMetadata(metadataJson: string | null) {
@@ -27,6 +28,19 @@ function getSkippedListingReviews(metadata: Record<string, unknown>) {
   const reviews = metadata.skippedListingReviews;
 
   return Array.isArray(reviews) ? reviews : [];
+}
+
+function getReviewStatus(review: unknown) {
+  if (
+    review &&
+    typeof review === "object" &&
+    "status" in review &&
+    typeof review.status === "string"
+  ) {
+    return review.status;
+  }
+
+  return null;
 }
 
 export async function getRecentSkippedMatchReviews(
@@ -57,6 +71,12 @@ export async function getRecentSkippedMatchReviews(
     const skippedListingReviews = getSkippedListingReviews(metadata);
 
     for (const review of skippedListingReviews) {
+      const reviewStatus = getReviewStatus(review);
+
+      if (options.status && reviewStatus !== options.status) {
+        continue;
+      }
+
       reviews.push({
         scrapeRun: {
           id: run.id,
@@ -83,6 +103,7 @@ export async function getRecentSkippedMatchReviews(
     filters: {
       limit: safeLimit,
       sourceName: options.sourceName ?? null,
+      status: options.status ?? null,
     },
     data,
     generatedAt: new Date().toISOString(),
