@@ -114,3 +114,25 @@ model ScrapeRun {
   @@index([status])
   @@index([startedAt])
 }
+
+model AlertLog {
+  id                 String   @id
+  dedupeKey          String
+  destinationType    String
+  destinationId      String?
+  destinationKey     String
+  alertType          String
+  ballId             String?
+  retailerListingId  String?
+  message            String
+  payloadJson        String?
+  sentAt             DateTime
+  createdAt          DateTime @default(now())
+
+  @@unique([dedupeKey, destinationKey])
+  @@index([alertType])
+  @@index([ballId])
+  @@index([retailerListingId])
+  @@index([destinationType])
+  @@index([sentAt])
+}
