@@ -12,6 +12,7 @@ import type {
 import { matchRetailerListingTitle } from "../services/listingMatchService";
 import { getBallPriceSummary } from "../services/ballPriceSummaryService";
 import { inspectRetailerPage } from "../scrapers/retailers/retailerInspector";
+import { scrapeBowlingComProductPage } from "../scrapers/retailers/bowlingComScraper";
 
 export const retailerRoutes = Router();
 
@@ -97,6 +98,30 @@ retailerRoutes.get("/inspect-page", async (req, res) => {
 
     return res.status(400).json({
       error: "Failed to inspect retailer page",
+      details: message,
+    });
+  }
+});
+
+retailerRoutes.get("/bowling-com/parse-product", async (req, res) => {
+  try {
+    const url = getRequiredString(req.query.url, "url");
+
+    const result = await scrapeBowlingComProductPage(url);
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown Bowling.com product parse error";
+
+    return res.status(400).json({
+      error: "Failed to parse Bowling.com product page",
       details: message,
     });
   }
