@@ -9,6 +9,7 @@ import type {
   MatchStatus,
   RetailerType,
 } from "../types/ball";
+import { matchRetailerListingTitle } from "../services/listingMatchService";
 
 export const retailerRoutes = Router();
 
@@ -62,6 +63,30 @@ function getAllowedValue<T extends string>(
 
   return parsed;
 }
+
+retailerRoutes.get("/match-listing", async (req, res) => {
+  try {
+    const listingTitle = getRequiredString(req.query.listingTitle, "listingTitle");
+
+    const limit = req.query.limit ? getNumber(req.query.limit, "limit") : 10;
+
+    const result = await matchRetailerListingTitle(listingTitle, limit);
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error ? error.message : "Unknown listing match error";
+
+    return res.status(400).json({
+      error: "Failed to match retailer listing",
+      details: message,
+    });
+  }
+});
 
 retailerRoutes.get("/manual-listing/upsert", async (req, res) => {
   try {
