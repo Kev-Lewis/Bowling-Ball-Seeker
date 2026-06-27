@@ -31,6 +31,19 @@ function normalizeText(value: string | null | undefined) {
     .trim();
 }
 
+function cleanCatalogNameForMatching(value: string | null | undefined) {
+  return normalizeText(value)
+    .replace(/\s+bowling balls for sale$/g, "")
+    .replace(/\s+bowling ball for sale$/g, "")
+    .replace(/\s+balls for sale$/g, "")
+    .replace(/\s+ball for sale$/g, "")
+    .replace(/\s+for sale$/g, "")
+    .replace(/\s+bowling balls$/g, "")
+    .replace(/\s+bowling ball$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function tokenize(value: string) {
   const ignoredTokens = new Set([
     "bowling",
@@ -124,22 +137,24 @@ export async function matchRetailerListingTitle(
       let score = 0;
       const reasons: string[] = [];
 
-      if (hasPhrase(normalizedTitle, ball.canonicalName)) {
-        score += 70;
-        reasons.push("Exact official ball name appears in listing title.");
-      } else {
-        const nameCoverage = tokenCoverage(titleTokens, ball.canonicalName);
+      const matchableCanonicalName = cleanCatalogNameForMatching(ball.canonicalName);
 
-        if (nameCoverage > 0) {
-          const points = Math.round(nameCoverage * 45);
-          score += points;
-          reasons.push(
-            `Official ball name token coverage: ${Math.round(
-              nameCoverage * 100
-            )}%.`
-          );
-        }
-      }
+if (hasPhrase(normalizedTitle, matchableCanonicalName)) {
+  score += 70;
+  reasons.push("Official ball name appears in listing title.");
+} else {
+  const nameCoverage = tokenCoverage(titleTokens, matchableCanonicalName);
+
+  if (nameCoverage > 0) {
+    const points = Math.round(nameCoverage * 45);
+    score += points;
+    reasons.push(
+      `Official ball name token coverage: ${Math.round(
+        nameCoverage * 100
+      )}%.`
+    );
+  }
+}
 
       if (hasPhrase(normalizedTitle, ball.brand)) {
         score += 20;
