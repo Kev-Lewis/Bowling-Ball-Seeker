@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { runDailyManufacturerSync } from "../jobs/manufacturerSyncJob";
+import { getLocalSchedulerStatus } from "../scheduler/localScheduler";
 
 export const jobRoutes = Router();
 
@@ -23,4 +24,10 @@ jobRoutes.get("/daily-manufacturer-sync/run", async (_req, res) => {
       details: message,
     });
   }
+});
+
+jobRoutes.get("/scheduler/status", (_req, res) => {
+  return res.json({
+    data: getLocalSchedulerStatus(),
+  });
 });

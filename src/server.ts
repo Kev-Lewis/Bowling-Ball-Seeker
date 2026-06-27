@@ -10,6 +10,7 @@ import { scrapeRunRoutes } from "./routes/scrapeRunRoutes";
 import { scraperRoutes } from "./routes/scraperRoutes";
 import { catalogRoutes } from "./routes/catalogRoutes";
 import { jobRoutes } from "./routes/jobRoutes";
+import { startLocalScheduler } from "./scheduler/localScheduler";
 
 dotenv.config();
 
@@ -40,4 +41,9 @@ app.use("/api/jobs", jobRoutes);
 
 app.listen(PORT, () => {
   console.log(`Bowling Ball Seeker API running on http://localhost:${PORT}`);
+});
+
+app.listen(PORT, () => {
+  console.log(`Bowling Ball Seeker API running on http://localhost:${PORT}`);
+  startLocalScheduler();
 });
