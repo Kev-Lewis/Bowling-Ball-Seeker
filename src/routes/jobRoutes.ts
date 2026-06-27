@@ -1,13 +1,13 @@
 import { Router } from "express";
-import { runDailyManufacturerSync } from "../jobs/manufacturerSyncJob";
-import { getLocalSchedulerStatus } from "../scheduler/localScheduler";
-import { runPriceAlertJob } from "../jobs/priceAlertJob";
 import { runDailySystemJob } from "../jobs/dailyJob";
+import { runDailyManufacturerSync } from "../jobs/manufacturerSyncJob";
+import { runPriceAlertJob } from "../jobs/priceAlertJob";
 import {
   runBowlingComCategoryScrapeJob,
   runBowlingComProductScrapeJob,
   runMockRetailerScrapeJob,
 } from "../jobs/retailerScrapeJob";
+import { getLocalSchedulerStatus } from "../scheduler/localScheduler";
 
 export const jobRoutes = Router();
 
@@ -22,13 +22,13 @@ function getNumberQuery(value: unknown, fallback: number) {
 }
 
 function getBooleanQuery(value: unknown, fallback: boolean) {
-  const parsed = value?.toString().toLowerCase();
+  const parsed = value?.toString().trim().toLowerCase();
 
-  if (parsed === "true") {
+  if (parsed === "true" || parsed === "1" || parsed === "yes") {
     return true;
   }
 
-  if (parsed === "false") {
+  if (parsed === "false" || parsed === "0" || parsed === "no") {
     return false;
   }
 
@@ -84,16 +84,19 @@ jobRoutes.get("/price-alerts/run", async (req, res) => {
     const limit = getNumberQuery(req.query.limit, 20);
     const minPriceDrop = getNumberQuery(req.query.minPriceDrop, 5);
     const minPercentDrop = getNumberQuery(req.query.minPercentDrop, 0);
+
     const includeStockChanges = getBooleanQuery(
       req.query.includeStockChanges,
       true
     );
+
     const inStockOnly = getBooleanQuery(req.query.inStockOnly, true);
 
     const destinationType = getStringQuery(
       req.query.destinationType,
       "discord"
     );
+
     const destinationId = getStringQuery(req.query.destinationId, "local-test");
 
     const result = await runPriceAlertJob({
@@ -130,23 +133,6 @@ jobRoutes.get("/daily/run", async (req, res) => {
     const minPriceDrop = getNumberQuery(req.query.minPriceDrop, 5);
     const minPercentDrop = getNumberQuery(req.query.minPercentDrop, 0);
 
-    const runBowlingComCategoryScrape = getBooleanQuery(
-  req.query.runBowlingComCategoryScrape,
-  true
-);
-
-const bowlingComCategoryUrls = getStringListQuery(req.query.bowlingComCategoryUrl);
-
-const bowlingComCategoryMaxPages = getNumberQuery(
-  req.query.bowlingComCategoryMaxPages,
-  1
-);
-
-const bowlingComCategoryMaxProducts = getNumberQuery(
-  req.query.bowlingComCategoryMaxProducts,
-  10
-);
-
     const includeStockChanges = getBooleanQuery(
       req.query.includeStockChanges,
       true
@@ -159,7 +145,46 @@ const bowlingComCategoryMaxProducts = getNumberQuery(
       true
     );
 
+    const runRetailerScrape = getBooleanQuery(
+      req.query.runRetailerScrape,
+      true
+    );
+
+    const runBowlingComProductScrape = getBooleanQuery(
+      req.query.runBowlingComProductScrape,
+      true
+    );
+
+    const runBowlingComCategoryScrape = getBooleanQuery(
+      req.query.runBowlingComCategoryScrape,
+      true
+    );
+
     const runPriceAlerts = getBooleanQuery(req.query.runPriceAlerts, true);
+
+    const allowLikelyMatch = getBooleanQuery(
+      req.query.allowLikelyMatch,
+      true
+    );
+
+    const minConfidence = getNumberQuery(req.query.minConfidence, 35);
+    const scrapeDelayMs = getNumberQuery(req.query.scrapeDelayMs, 750);
+
+    const bowlingComProductUrls = getStringListQuery(req.query.bowlingComUrl);
+
+    const bowlingComCategoryUrls = getStringListQuery(
+      req.query.bowlingComCategoryUrl
+    );
+
+    const bowlingComCategoryMaxPages = getNumberQuery(
+      req.query.bowlingComCategoryMaxPages,
+      1
+    );
+
+    const bowlingComCategoryMaxProducts = getNumberQuery(
+      req.query.bowlingComCategoryMaxProducts,
+      10
+    );
 
     const destinationType = getStringQuery(
       req.query.destinationType,
@@ -171,56 +196,39 @@ const bowlingComCategoryMaxProducts = getNumberQuery(
       "daily-local"
     );
 
-    const runRetailerScrape = getBooleanQuery(
-  req.query.runRetailerScrape,
-  true
-);
-
-const allowLikelyMatch = getBooleanQuery(
-  req.query.allowLikelyMatch,
-  true
-);
-
-const runBowlingComProductScrape = getBooleanQuery(
-  req.query.runBowlingComProductScrape,
-  true
-);
-
-const bowlingComProductUrls = getStringListQuery(req.query.bowlingComUrl);
-
-const minConfidence = getNumberQuery(req.query.minConfidence, 35);
-
     const result = await runDailySystemJob({
-  runManufacturerSync,
-  runRetailerScrape,
-  runBowlingComProductScrape,
-  runPriceAlerts,
-  bowlingComProductUrls:
-    bowlingComProductUrls.length > 0 ? bowlingComProductUrls : undefined,
-  retailerScrapeOptions: {
-    allowLikelyMatch,
-    minConfidence,
-  },
-  runBowlingComCategoryScrape,
-bowlingComCategoryUrls:
-  bowlingComCategoryUrls.length > 0 ? bowlingComCategoryUrls : undefined,
-bowlingComCategoryScrapeOptions: {
-  allowLikelyMatch,
-  minConfidence,
-  maxPages: bowlingComCategoryMaxPages,
-  maxProducts: bowlingComCategoryMaxProducts,
-},
-  priceAlertOptions: {
-    days,
-    limit,
-    minPriceDrop,
-    minPercentDrop,
-    includeStockChanges,
-    inStockOnly,
-    destinationType,
-    destinationId,
-  },
-});
+      runManufacturerSync,
+      runRetailerScrape,
+      runBowlingComProductScrape,
+      runBowlingComCategoryScrape,
+      runPriceAlerts,
+      bowlingComProductUrls:
+        bowlingComProductUrls.length > 0 ? bowlingComProductUrls : undefined,
+      bowlingComCategoryUrls:
+        bowlingComCategoryUrls.length > 0 ? bowlingComCategoryUrls : undefined,
+      retailerScrapeOptions: {
+        allowLikelyMatch,
+        minConfidence,
+        scrapeDelayMs,
+      },
+      bowlingComCategoryScrapeOptions: {
+        allowLikelyMatch,
+        minConfidence,
+        maxPages: bowlingComCategoryMaxPages,
+        maxProducts: bowlingComCategoryMaxProducts,
+        scrapeDelayMs,
+      },
+      priceAlertOptions: {
+        days,
+        limit,
+        minPriceDrop,
+        minPercentDrop,
+        includeStockChanges,
+        inStockOnly,
+        destinationType,
+        destinationId,
+      },
+    });
 
     return res.json({
       data: result,
@@ -255,7 +263,9 @@ jobRoutes.get("/mock-retailer-scrape/run", async (req, res) => {
     console.error(error);
 
     const message =
-      error instanceof Error ? error.message : "Unknown mock retailer scrape error";
+      error instanceof Error
+        ? error.message
+        : "Unknown mock retailer scrape error";
 
     return res.status(500).json({
       error: "Failed to run mock retailer scrape job",
@@ -266,9 +276,9 @@ jobRoutes.get("/mock-retailer-scrape/run", async (req, res) => {
 
 jobRoutes.get("/bowling-com-product-scrape/run", async (req, res) => {
   try {
-    const rawUrl = req.query.url?.toString().trim();
+    const urls = getStringListQuery(req.query.url);
 
-    if (!rawUrl) {
+    if (urls.length === 0) {
       return res.status(400).json({
         error: "Missing required query parameter: url",
       });
@@ -276,10 +286,12 @@ jobRoutes.get("/bowling-com-product-scrape/run", async (req, res) => {
 
     const allowLikelyMatch = getBooleanQuery(req.query.allowLikelyMatch, true);
     const minConfidence = getNumberQuery(req.query.minConfidence, 35);
+    const scrapeDelayMs = getNumberQuery(req.query.scrapeDelayMs, 750);
 
-    const result = await runBowlingComProductScrapeJob([rawUrl], {
+    const result = await runBowlingComProductScrapeJob(urls, {
       allowLikelyMatch,
       minConfidence,
+      scrapeDelayMs,
     });
 
     return res.json({
@@ -314,12 +326,14 @@ jobRoutes.get("/bowling-com-category-scrape/run", async (req, res) => {
     const minConfidence = getNumberQuery(req.query.minConfidence, 35);
     const maxPages = getNumberQuery(req.query.maxPages, 1);
     const maxProducts = getNumberQuery(req.query.maxProducts, 10);
+    const scrapeDelayMs = getNumberQuery(req.query.scrapeDelayMs, 750);
 
     const result = await runBowlingComCategoryScrapeJob(rawUrl, {
       allowLikelyMatch,
       minConfidence,
       maxPages,
       maxProducts,
+      scrapeDelayMs,
     });
 
     return res.json({

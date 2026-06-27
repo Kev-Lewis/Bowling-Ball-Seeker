@@ -18,6 +18,7 @@ import type { ScrapedRetailerListing } from "../types/retailerScraper";
 export interface RetailerScrapeJobOptions {
   allowLikelyMatch?: boolean;
   minConfidence?: number;
+  scrapeDelayMs?: number;
 }
 
 export interface BowlingComCategoryScrapeJobOptions
@@ -184,6 +185,32 @@ function countSkippedSnapshots(results: RetailerScrapeProcessingResult[]) {
   }).length;
 }
 
+function getSafeScrapeDelayMs(value: number | undefined) {
+  if (value === undefined || !Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+
+  return Math.min(value, 5000);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function delayBetweenProductScrapes(
+  currentIndex: number,
+  totalCount: number,
+  delayMs: number
+) {
+  const hasMoreProducts = currentIndex < totalCount - 1;
+
+  if (hasMoreProducts && delayMs > 0) {
+    await sleep(delayMs);
+  }
+}
+
 export async function runMockRetailerScrapeJob(
   options: RetailerScrapeJobOptions = {}
 ) {
@@ -276,6 +303,7 @@ export async function runBowlingComProductScrapeJob(
   options: RetailerScrapeJobOptions = {}
 ) {
   const startedAt = new Date().toISOString();
+  const scrapeDelayMs = getSafeScrapeDelayMs(options.scrapeDelayMs ?? 750);
 
   const scrapeRun = await startScrapeRun({
     sourceName: "bowling.com",
@@ -285,15 +313,18 @@ export async function runBowlingComProductScrapeJob(
       urls,
       allowLikelyMatch: options.allowLikelyMatch ?? false,
       minConfidence: options.minConfidence ?? 35,
+      scrapeDelayMs,
     },
   });
 
   try {
     const scrapedListings: ScrapedRetailerListing[] = [];
 
-    for (const url of urls) {
+    for (const [index, url] of urls.entries()) {
       const listing = await scrapeBowlingComProductPage(url);
       scrapedListings.push(listing);
+
+      await delayBetweenProductScrapes(index, urls.length, scrapeDelayMs);
     }
 
     const results: RetailerScrapeProcessingResult[] = [];
@@ -319,6 +350,7 @@ export async function runBowlingComProductScrapeJob(
       sourceUrl: "https://www.bowling.com/",
       startedAt,
       finishedAt: new Date().toISOString(),
+      scrapeDelayMs,
       scrapedCount: scrapedListings.length,
       savedCount,
       skippedNoMatchCount,
@@ -339,6 +371,7 @@ export async function runBowlingComProductScrapeJob(
       metadata: {
         mode: "bowling_com_product_pages",
         urls,
+        scrapeDelayMs,
         savedCount,
         skippedNoMatchCount,
         skippedNeedsReviewCount,
@@ -360,6 +393,7 @@ export async function runBowlingComProductScrapeJob(
     await failScrapeRun(scrapeRun.id, message, {
       mode: "bowling_com_product_pages",
       urls,
+      scrapeDelayMs,
       allowLikelyMatch: options.allowLikelyMatch ?? false,
       minConfidence: options.minConfidence ?? 35,
     });
@@ -376,6 +410,7 @@ export async function runBowlingComCategoryScrapeJob(
 
   const maxPages = options.maxPages ?? 1;
   const maxProducts = options.maxProducts ?? 10;
+  const scrapeDelayMs = getSafeScrapeDelayMs(options.scrapeDelayMs ?? 750);
 
   const scrapeRun = await startScrapeRun({
     sourceName: "bowling.com",
@@ -385,6 +420,7 @@ export async function runBowlingComCategoryScrapeJob(
       categoryUrl,
       maxPages,
       maxProducts,
+      scrapeDelayMs,
       allowLikelyMatch: options.allowLikelyMatch ?? false,
       minConfidence: options.minConfidence ?? 35,
     },
@@ -398,9 +434,15 @@ export async function runBowlingComCategoryScrapeJob(
     const productCandidates = categoryResult.data.slice(0, maxProducts);
     const scrapedListings: ScrapedRetailerListing[] = [];
 
-    for (const product of productCandidates) {
+    for (const [index, product] of productCandidates.entries()) {
       const listing = await scrapeBowlingComProductPage(product.url);
       scrapedListings.push(listing);
+
+      await delayBetweenProductScrapes(
+        index,
+        productCandidates.length,
+        scrapeDelayMs
+      );
     }
 
     const results: RetailerScrapeProcessingResult[] = [];
@@ -426,6 +468,7 @@ export async function runBowlingComCategoryScrapeJob(
       sourceUrl: categoryUrl,
       startedAt,
       finishedAt: new Date().toISOString(),
+      scrapeDelayMs,
       categoryPageCount: categoryResult.pageCount,
       discoveredProductCount: categoryResult.productCount,
       scrapedCount: scrapedListings.length,
@@ -452,6 +495,7 @@ export async function runBowlingComCategoryScrapeJob(
         categoryUrl,
         maxPages,
         maxProducts,
+        scrapeDelayMs,
         categoryPageCount: categoryResult.pageCount,
         discoveredProductCount: categoryResult.productCount,
         scrapedCount: scrapedListings.length,
@@ -478,6 +522,7 @@ export async function runBowlingComCategoryScrapeJob(
       categoryUrl,
       maxPages,
       maxProducts,
+      scrapeDelayMs,
       allowLikelyMatch: options.allowLikelyMatch ?? false,
       minConfidence: options.minConfidence ?? 35,
     });
