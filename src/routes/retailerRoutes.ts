@@ -64,13 +64,38 @@ function getAllowedValue<T extends string>(
   return parsed;
 }
 
+function getBooleanQuery(value: unknown, fallback = false) {
+  const parsed = value?.toString().toLowerCase();
+
+  if (parsed === "true") {
+    return true;
+  }
+
+  if (parsed === "false") {
+    return false;
+  }
+
+  return fallback;
+}
+
 retailerRoutes.get("/match-listing", async (req, res) => {
   try {
     const listingTitle = getRequiredString(req.query.listingTitle, "listingTitle");
 
     const limit = req.query.limit ? getNumber(req.query.limit, "limit") : 10;
+    const minConfidence = req.query.minConfidence
+      ? getNumber(req.query.minConfidence, "minConfidence")
+      : 35;
 
-    const result = await matchRetailerListingTitle(listingTitle, limit);
+    const includeRejected = getBooleanQuery(req.query.includeRejected, false);
+    const currentOnly = getBooleanQuery(req.query.currentOnly, true);
+
+    const result = await matchRetailerListingTitle(listingTitle, {
+      limit,
+      minConfidence,
+      includeRejected,
+      currentOnly,
+    });
 
     return res.json({
       data: result,
@@ -83,6 +108,105 @@ retailerRoutes.get("/match-listing", async (req, res) => {
 
     return res.status(400).json({
       error: "Failed to match retailer listing",
+      details: message,
+    });
+  }
+});
+
+retailerRoutes.get("/manual-listing/upsert-with-match", async (req, res) => {
+  try {
+    const retailerName = getRequiredString(req.query.retailerName, "retailerName");
+    const listingTitle = getRequiredString(req.query.listingTitle, "listingTitle");
+    const listingUrl = getRequiredString(req.query.listingUrl, "listingUrl");
+    const currentPrice = getNumber(req.query.currentPrice, "currentPrice");
+
+    const allowLikelyMatch = getBooleanQuery(req.query.allowLikelyMatch, false);
+
+    const retailerType = getAllowedValue(
+      req.query.retailerType,
+      "retailerType",
+      retailerTypes,
+      "verified_retailer"
+    );
+
+    const condition = getAllowedValue(
+      req.query.condition,
+      "condition",
+      listingConditions,
+      "new"
+    );
+
+    const stockStatus = getAllowedValue(
+      req.query.stockStatus,
+      "stockStatus",
+      stockStatuses,
+      "unknown"
+    );
+
+    const matchResult = await matchRetailerListingTitle(listingTitle, {
+      limit: 5,
+      minConfidence: 35,
+      includeRejected: false,
+      currentOnly: true,
+    });
+
+    const topMatch = matchResult.data[0];
+
+    if (!topMatch) {
+      return res.status(422).json({
+        error: "No usable catalog match found for listing title",
+        data: {
+          listingTitle,
+          matches: matchResult,
+        },
+      });
+    }
+
+    const canAutoSave =
+      topMatch.matchStatus === "auto_matched" ||
+      (allowLikelyMatch && topMatch.matchStatus === "likely_match");
+
+    if (!canAutoSave) {
+      return res.status(409).json({
+        error: "Listing needs manual match review before saving",
+        data: {
+          topMatch,
+          matches: matchResult,
+          hint: "Pass allowLikelyMatch=true to save likely_match results during local testing.",
+        },
+      });
+    }
+
+    const result = await upsertRetailerListingWithSnapshot({
+      ballId: topMatch.ballId,
+      retailerName,
+      retailerType,
+      listingTitle,
+      listingUrl,
+      condition,
+      matchConfidence: topMatch.confidence,
+      matchStatus: topMatch.matchStatus,
+      currentPrice,
+      stockStatus,
+    });
+
+    return res.json({
+      data: {
+        selectedMatch: topMatch,
+        upsert: result,
+        matches: matchResult.data,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown upsert-with-match error";
+
+    return res.status(400).json({
+      error: "Failed to upsert retailer listing with match",
       details: message,
     });
   }

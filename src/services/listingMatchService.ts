@@ -15,6 +15,13 @@ export interface ListingMatchCandidate {
   reasons: string[];
 }
 
+export interface ListingMatchOptions {
+  limit?: number;
+  minConfidence?: number;
+  includeRejected?: boolean;
+  currentOnly?: boolean;
+}
+
 function normalizeText(value: string | null | undefined) {
   return (value ?? "")
     .toLowerCase()
@@ -93,25 +100,32 @@ function statusFromConfidence(confidence: number): MatchStatus {
 
 export async function matchRetailerListingTitle(
   listingTitle: string,
-  limit = 10
+  options: ListingMatchOptions = {}
 ) {
+  const limit = options.limit ?? 10;
+  const minConfidence = options.minConfidence ?? 35;
+  const includeRejected = options.includeRejected ?? false;
+  const currentOnly = options.currentOnly ?? true;
+
   const normalizedTitle = normalizeText(listingTitle);
   const titleTokens = uniqueTokens(listingTitle);
 
   const balls = await prisma.ball.findMany({
-    where: {
-      isCurrent: true,
-    },
+    where: currentOnly
+      ? {
+          isCurrent: true,
+        }
+      : {},
     orderBy: [{ brand: "asc" }, { canonicalName: "asc" }],
   });
 
-  const candidates: ListingMatchCandidate[] = balls
+  const allCandidates: ListingMatchCandidate[] = balls
     .map((ball) => {
       let score = 0;
       const reasons: string[] = [];
 
       if (hasPhrase(normalizedTitle, ball.canonicalName)) {
-        score += 55;
+        score += 70;
         reasons.push("Exact official ball name appears in listing title.");
       } else {
         const nameCoverage = tokenCoverage(titleTokens, ball.canonicalName);
@@ -175,16 +189,34 @@ export async function matchRetailerListingTitle(
       };
     })
     .filter((candidate) => {
-      return candidate.confidence > 0;
+      if (candidate.confidence <= 0) {
+        return false;
+      }
+
+      if (includeRejected) {
+        return true;
+      }
+
+      return (
+        candidate.matchStatus !== "rejected" &&
+        candidate.confidence >= minConfidence
+      );
     })
     .sort((a, b) => {
       return b.confidence - a.confidence;
-    })
-    .slice(0, limit);
+    });
+
+  const candidates = allCandidates.slice(0, limit);
 
   return {
     listingTitle,
     normalizedTitle,
+    filters: {
+      limit,
+      minConfidence,
+      includeRejected,
+      currentOnly,
+    },
     count: candidates.length,
     data: candidates,
     generatedAt: new Date().toISOString(),
