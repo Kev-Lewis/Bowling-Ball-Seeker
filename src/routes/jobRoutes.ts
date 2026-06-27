@@ -2,6 +2,7 @@ import { Router } from "express";
 import { runDailyManufacturerSync } from "../jobs/manufacturerSyncJob";
 import { getLocalSchedulerStatus } from "../scheduler/localScheduler";
 import { runPriceAlertJob } from "../jobs/priceAlertJob";
+import { runDailySystemJob } from "../jobs/dailyJob";
 
 export const jobRoutes = Router();
 
@@ -103,6 +104,68 @@ jobRoutes.get("/price-alerts/run", async (req, res) => {
 
     return res.status(500).json({
       error: "Failed to run price alert job",
+      details: message,
+    });
+  }
+});
+
+jobRoutes.get("/daily/run", async (req, res) => {
+  try {
+    const days = getNumberQuery(req.query.days, 7);
+    const limit = getNumberQuery(req.query.limit, 20);
+    const minPriceDrop = getNumberQuery(req.query.minPriceDrop, 5);
+    const minPercentDrop = getNumberQuery(req.query.minPercentDrop, 0);
+
+    const includeStockChanges = getBooleanQuery(
+      req.query.includeStockChanges,
+      true
+    );
+
+    const inStockOnly = getBooleanQuery(req.query.inStockOnly, true);
+
+    const runManufacturerSync = getBooleanQuery(
+      req.query.runManufacturerSync,
+      true
+    );
+
+    const runPriceAlerts = getBooleanQuery(req.query.runPriceAlerts, true);
+
+    const destinationType = getStringQuery(
+      req.query.destinationType,
+      "discord"
+    );
+
+    const destinationId = getStringQuery(
+      req.query.destinationId,
+      "daily-local"
+    );
+
+    const result = await runDailySystemJob({
+      runManufacturerSync,
+      runPriceAlerts,
+      priceAlertOptions: {
+        days,
+        limit,
+        minPriceDrop,
+        minPercentDrop,
+        includeStockChanges,
+        inStockOnly,
+        destinationType,
+        destinationId,
+      },
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error ? error.message : "Unknown daily job error";
+
+    return res.status(500).json({
+      error: "Failed to run daily system job",
       details: message,
     });
   }

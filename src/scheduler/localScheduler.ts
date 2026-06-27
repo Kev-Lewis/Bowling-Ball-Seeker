@@ -1,4 +1,4 @@
-import { runDailyManufacturerSync } from "../jobs/manufacturerSyncJob";
+import { runDailySystemJob } from "../jobs/dailyJob";
 
 interface SchedulerState {
   enabled: boolean;
@@ -46,10 +46,10 @@ function addHours(date: Date, hours: number) {
   return new Date(date.getTime() + hours * 60 * 60 * 1000);
 }
 
-async function runScheduledManufacturerSync() {
+async function runScheduledDailyJob() {
   if (schedulerState.running) {
     schedulerState.lastStatus = "skipped";
-    schedulerState.lastError = "Previous manufacturer sync is still running.";
+    schedulerState.lastError = "Previous daily job is still running.";
     return;
   }
 
@@ -58,10 +58,23 @@ async function runScheduledManufacturerSync() {
   schedulerState.lastError = null;
 
   try {
-    const result = await runDailyManufacturerSync();
+    const result = await runDailySystemJob({
+      runManufacturerSync: true,
+      runPriceAlerts: true,
+      priceAlertOptions: {
+        days: 7,
+        limit: 20,
+        minPriceDrop: 5,
+        minPercentDrop: 0,
+        includeStockChanges: true,
+        inStockOnly: true,
+        destinationType: "discord",
+        destinationId: "local-scheduler",
+      },
+    });
 
     schedulerState.lastStatus =
-      result.failedCount > 0 ? "failed" : "success";
+      result.status === "success" ? "success" : "failed";
 
     schedulerState.lastFinishedAt = new Date().toISOString();
   } catch (error) {
@@ -104,18 +117,18 @@ export function startLocalScheduler() {
   const intervalMs = intervalHours * 60 * 60 * 1000;
 
   schedulerInterval = setInterval(() => {
-    void runScheduledManufacturerSync();
+    void runScheduledDailyJob();
   }, intervalMs);
 
   console.log(
-    `Local scheduler enabled. Manufacturer sync interval: ${intervalHours} hour(s).`
+    `Local scheduler enabled. Daily job interval: ${intervalHours} hour(s).`
   );
 
   if (runOnStart) {
-    console.log("RUN_SYNC_ON_START enabled. Starting manufacturer sync shortly.");
+    console.log("RUN_SYNC_ON_START enabled. Starting daily job shortly.");
 
     setTimeout(() => {
-      void runScheduledManufacturerSync();
+      void runScheduledDailyJob();
     }, 3000);
   }
 }
