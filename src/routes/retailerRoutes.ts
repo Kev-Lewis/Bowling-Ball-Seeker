@@ -459,6 +459,10 @@ retailerRoutes.get("/match-review/resolve", async (req, res) => {
     const listingUrl = req.query.listingUrl?.toString().trim();
     const rawMatchConfidence = Number(req.query.matchConfidence ?? 100);
     const note = req.query.note?.toString().trim();
+    const rawDryRun = req.query.dryRun?.toString().trim().toLowerCase();
+
+const dryRun =
+  rawDryRun === "true" || rawDryRun === "1" || rawDryRun === "yes";
 
     if (!ballId) {
       return res.status(400).json({
@@ -480,6 +484,7 @@ retailerRoutes.get("/match-review/resolve", async (req, res) => {
           ? rawMatchConfidence
           : 100,
       note: note || undefined,
+      dryRun,
     });
 
     return res.json({

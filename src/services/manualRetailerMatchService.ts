@@ -8,6 +8,7 @@ export interface ResolveRetailerListingMatchInput {
   listingUrl: string;
   matchConfidence?: number;
   note?: string;
+  dryRun?: boolean;
 }
 
 function isBowlingComUrl(url: string) {
@@ -51,8 +52,9 @@ export async function resolveRetailerListingMatch(
   const listing = await scrapeListingForManualMatch(input.listingUrl);
 
   const matchConfidence = input.matchConfidence ?? 100;
+  const dryRun = input.dryRun ?? false;
 
-  const upsert = await upsertRetailerListingWithSnapshot({
+  const plannedWrite = {
     ballId: ball.id,
     retailerName: listing.retailerName,
     retailerType: listing.retailerType,
@@ -60,13 +62,34 @@ export async function resolveRetailerListingMatch(
     listingUrl: listing.listingUrl,
     condition: listing.condition,
     matchConfidence,
-    matchStatus: "manual_review",
+    matchStatus: "manual_review" as const,
     currentPrice: listing.currentPrice,
     stockStatus: listing.stockStatus,
-  });
+  };
+
+  if (dryRun) {
+    return {
+      resolvedAt: new Date().toISOString(),
+      dryRun: true,
+      note: input.note ?? null,
+      selectedBall: {
+        id: ball.id,
+        canonicalName: ball.canonicalName,
+        brand: ball.brand,
+        manufacturer: ball.manufacturer,
+        isCurrent: ball.isCurrent,
+      },
+      scrapedListing: listing,
+      plannedWrite,
+      upsert: null,
+    };
+  }
+
+  const upsert = await upsertRetailerListingWithSnapshot(plannedWrite);
 
   return {
     resolvedAt: new Date().toISOString(),
+    dryRun: false,
     note: input.note ?? null,
     selectedBall: {
       id: ball.id,
@@ -76,6 +99,7 @@ export async function resolveRetailerListingMatch(
       isCurrent: ball.isCurrent,
     },
     scrapedListing: listing,
+    plannedWrite,
     upsert,
   };
 }
