@@ -46,13 +46,17 @@ function normalizeMotivBallGuideUrl(url: string) {
 
 function isLikelyMotivBallGuideProductUrl(url: string) {
   const parsedUrl = new URL(url);
-  const pathname = parsedUrl.pathname.toLowerCase();
+  const pathname = parsedUrl.pathname.toLowerCase().replace(/\/$/, "");
 
   if (parsedUrl.hostname !== "www.motivbowling.com") {
     return false;
   }
 
-  return /^\/ball-guide\/n_\d+$/.test(pathname) || /^\/n_\d+$/.test(pathname);
+  return (
+    /^\/ball-guide\/n_\d+$/.test(pathname) ||
+    /^\/products\/balls\/n_\d+$/.test(pathname) ||
+    /^\/n_\d+$/.test(pathname)
+  );
 }
 
 function isLikelyBallName(name: string) {
@@ -272,8 +276,10 @@ async function fetchMotivHtml(url: string) {
   return response.data;
 }
 
-export async function discoverMotivBallProducts(): Promise<ProductDiscoveryResult> {
-  const response = await axios.get(MOTIV_BALL_GUIDE_URL, {
+export async function discoverMotivBallProducts(
+  sourceUrl = MOTIV_BALL_GUIDE_URL
+): Promise<ProductDiscoveryResult> {
+  const response = await axios.get(sourceUrl, {
     headers: {
       "User-Agent":
         "BowlingBallSeeker/0.1.0 (+https://github.com/kev-lewis/bowling-ball-seeker)",
@@ -293,7 +299,7 @@ export async function discoverMotivBallProducts(): Promise<ProductDiscoveryResul
       return;
     }
 
-    const absoluteUrl = toAbsoluteUrl(href, MOTIV_BALL_GUIDE_URL);
+    const absoluteUrl = toAbsoluteUrl(href, sourceUrl);
 
     if (!absoluteUrl) {
       return;
@@ -303,7 +309,25 @@ export async function discoverMotivBallProducts(): Promise<ProductDiscoveryResul
       return;
     }
 
-    const name = cleanText($(element).text());
+    const linkText = cleanText($(element).text());
+    const titleText = cleanText($(element).attr("title") ?? "");
+    const ariaText = cleanText($(element).attr("aria-label") ?? "");
+    const imageAltText = cleanText($(element).find("img").first().attr("alt") ?? "");
+
+    const lastSegment =
+      new URL(absoluteUrl).pathname
+        .split("/")
+        .filter(Boolean)
+        .pop() ?? "";
+
+    const urlNameText = cleanText(
+      /^n_\d+$/i.test(lastSegment)
+        ? "Motiv " + lastSegment
+        : lastSegment.replace(/[-_]+/g, " ")
+    );
+
+    const name =
+      linkText || titleText || ariaText || imageAltText || urlNameText || "Motiv product";
 
     if (!isLikelyBallName(name)) {
       return;
@@ -322,7 +346,7 @@ export async function discoverMotivBallProducts(): Promise<ProductDiscoveryResul
 
   return {
     sourceName: "Motiv",
-    sourceUrl: MOTIV_BALL_GUIDE_URL,
+    sourceUrl,
     checkedAt: new Date().toISOString(),
     count: data.length,
     data,
@@ -378,8 +402,8 @@ export async function parseMotivBallPage(
   };
 }
 
-export async function scrapeMotivManufacturerCatalog() {
-  const discoveryResult = await discoverMotivBallProducts();
+export async function scrapeMotivManufacturerCatalog(sourceUrl = MOTIV_BALL_GUIDE_URL) {
+  const discoveryResult = await discoverMotivBallProducts(sourceUrl);
 
   const parsedBalls: ManufacturerBallInput[] = [];
   const parseFailures: {

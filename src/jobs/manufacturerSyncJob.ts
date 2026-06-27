@@ -22,7 +22,9 @@ export interface ManufacturerSyncJobResult {
   details?: unknown;
 }
 
-export async function runMotivManufacturerSync(): Promise<ManufacturerSyncJobResult> {
+export async function runMotivManufacturerSync(
+  options: { sourceUrl?: string } = {}
+): Promise<ManufacturerSyncJobResult> {
   const scrapeRun = await startScrapeRun({
     sourceName: "Motiv",
     sourceType: "manufacturer_catalog_live_sync",
@@ -33,7 +35,7 @@ export async function runMotivManufacturerSync(): Promise<ManufacturerSyncJobRes
   });
 
   try {
-    const catalogResult = await scrapeMotivManufacturerCatalog();
+    const catalogResult = await scrapeMotivManufacturerCatalog(options.sourceUrl);
 
     if (catalogResult.parseFailures.length > 0) {
       const errorMessage = "One or more MOTIV ball pages failed to parse.";

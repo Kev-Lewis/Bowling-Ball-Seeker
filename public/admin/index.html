@@ -944,7 +944,20 @@
           padding: 12px;
         }
       }
-    </style>
+    
+      .required-star {
+        color: #c53030;
+        font-weight: 900;
+        margin-left: 3px;
+      }
+
+      input.required-empty,
+      select.required-empty {
+        background: #fff1f2;
+        border-color: #f1a3a3;
+        box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08);
+      }
+</style>
   </head>
 
   <body>
@@ -1242,6 +1255,139 @@
             </div>
 
             <div id="trackedSourcesTable"></div>
+          </div>
+        </section>
+
+
+        <section id="manufacturer-sources" class="widget">
+          <div class="widget-head">
+            <div class="widget-title-row">
+              <h2>Manufacturer Sources</h2>
+              <button class="info-button" data-info-target="manufacturerSourcesInfo">Info</button>
+            </div>
+            <div id="manufacturerSourcesInfo" class="widget-description" hidden>
+              Saved official manufacturer catalog sources. These are the canonical product-truth sources used before retailer matching.
+            </div>
+          </div>
+
+          <div class="widget-body">
+            <div class="output-summary">
+              Add official catalog/lineup sources here. Fields marked * must be filled in. Run support will be added after the source manager is stable.
+            </div>
+
+            <div class="grid grid-3" style="margin-top: 16px">
+              <div>
+                <label for="manufacturerSourceName">Source Name <span class="required-star">*</span></label>
+                <input id="manufacturerSourceName" placeholder="Motiv Official Catalog" />
+              </div>
+              <div>
+                <label for="manufacturerSourceManufacturerName">Manufacturer Name <span class="required-star">*</span></label>
+                <input id="manufacturerSourceManufacturerName" placeholder="Motiv" />
+              </div>
+              <div>
+                <label for="manufacturerSourceBrandName">Brand Name</label>
+                <input id="manufacturerSourceBrandName" placeholder="Motiv, Storm, Roto Grip..." />
+              </div>
+              <div>
+                <label for="manufacturerSourceKind">Source Kind <span class="required-star">*</span></label>
+                <select id="manufacturerSourceKind">
+                  <option value="catalog" selected>catalog</option>
+                  <option value="lineup">lineup</option>
+                  <option value="product">product</option>
+                </select>
+              </div>
+              <div>
+                <label for="manufacturerSourceParserKey">Parser Key <span class="required-star">*</span></label>
+                <select id="manufacturerSourceParserKey">
+                  <option value="motiv" selected>motiv</option>
+                  <option value="storm">storm</option>
+                  <option value="roto-grip">roto-grip</option>
+                  <option value="900-global">900-global</option>
+                  <option value="generic">generic</option>
+                </select>
+              </div>
+              <div>
+                <label for="manufacturerSourceEnabled">Enabled</label>
+                <select id="manufacturerSourceEnabled">
+                  <option value="true" selected>true</option>
+                  <option value="false">false</option>
+                </select>
+              </div>
+              <div>
+                <label for="manufacturerSourceUrl">Official Source URL <span class="required-star">*</span></label>
+                <input id="manufacturerSourceUrl" placeholder="https://..." />
+              </div>
+              <div>
+                <label for="manufacturerSourceMaxPages">Max Pages</label>
+                <input id="manufacturerSourceMaxPages" type="number" value="1" />
+              </div>
+              <div>
+                <label for="manufacturerSourceMaxProducts">Max Products</label>
+                <input id="manufacturerSourceMaxProducts" type="number" value="50" />
+              </div>
+              <div>
+                <label for="manufacturerSourceScrapeDelayMs">Scrape Delay MS</label>
+                <input id="manufacturerSourceScrapeDelayMs" type="number" value="750" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-top: 16px">
+              <button id="saveManufacturerSourceBtn">Save Manufacturer Source</button>
+              <button id="clearManufacturerSourceFormBtn" class="secondary">Clear Form</button>
+            </div>
+
+            <div class="output-summary" style="margin-top: 20px">
+              Filter saved manufacturer sources.
+            </div>
+
+            <div class="grid grid-3" style="margin-top: 16px">
+              <div>
+                <label for="manufacturerSourceManufacturerFilter">Manufacturer Name</label>
+                <input id="manufacturerSourceManufacturerFilter" placeholder="Motiv" />
+              </div>
+              <div>
+                <label for="manufacturerSourceBrandFilter">Brand Name</label>
+                <input id="manufacturerSourceBrandFilter" placeholder="Motiv" />
+              </div>
+              <div>
+                <label for="manufacturerSourceParserKeyFilter">Parser Key</label>
+                <select id="manufacturerSourceParserKeyFilter">
+                  <option value="">any</option>
+                  <option value="motiv">motiv</option>
+                  <option value="storm">storm</option>
+                  <option value="roto-grip">roto-grip</option>
+                  <option value="900-global">900-global</option>
+                  <option value="generic">generic</option>
+                </select>
+              </div>
+              <div>
+                <label for="manufacturerSourceKindFilter">Source Kind</label>
+                <select id="manufacturerSourceKindFilter">
+                  <option value="">any</option>
+                  <option value="catalog">catalog</option>
+                  <option value="lineup">lineup</option>
+                  <option value="product">product</option>
+                </select>
+              </div>
+              <div>
+                <label for="manufacturerSourceEnabledFilter">Enabled</label>
+                <select id="manufacturerSourceEnabledFilter">
+                  <option value="">any</option>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row" style="margin-top: 16px">
+              <button id="loadManufacturerSourcesBtn">Load Manufacturer Sources</button>
+            </div>
+
+            <div id="manufacturerSourcesSummary" class="output-summary">
+              Manufacturer sources will appear here.
+            </div>
+
+            <div id="manufacturerSourcesTable"></div>
           </div>
         </section>
 

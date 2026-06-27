@@ -8,6 +8,7 @@ let lastScrapeOutput = null;
 let lastCandidatePreviewOutput = null;
 let dashboardSummaryRefreshTimeout = null;
 let lastTrackedSources = [];
+let lastManufacturerSources = [];
 let lastCatalogBalls = [];
 let catalogBallListingContext = null;
 let isCreatingCatalogBall = false;
@@ -1183,6 +1184,225 @@ async function setTrackedSourceEnabled(sourceId, enabled) {
   }
 }
 
+
+function clearManufacturerSourceForm() {
+  document.getElementById("manufacturerSourceName").value = "";
+  document.getElementById("manufacturerSourceManufacturerName").value = "";
+  document.getElementById("manufacturerSourceBrandName").value = "";
+  document.getElementById("manufacturerSourceKind").value = "catalog";
+  document.getElementById("manufacturerSourceParserKey").value = "motiv";
+  document.getElementById("manufacturerSourceUrl").value = "";
+  document.getElementById("manufacturerSourceEnabled").value = "true";
+  document.getElementById("manufacturerSourceMaxPages").value = "1";
+  document.getElementById("manufacturerSourceMaxProducts").value = "50";
+  document.getElementById("manufacturerSourceScrapeDelayMs").value = "750";
+
+  const summary = document.getElementById("manufacturerSourcesSummary");
+  if (summary) {
+    summary.textContent = "Manufacturer source form cleared.";
+  }
+}
+
+function getManufacturerSourceById(sourceId) {
+  return lastManufacturerSources.find((source) => source.id === sourceId);
+}
+
+function editManufacturerSourceFromEncoded(encodedSourceId) {
+  const source = getManufacturerSourceById(decodeURIComponent(encodedSourceId));
+
+  if (!source) {
+    setStatus("Error", "error");
+    return;
+  }
+
+  document.getElementById("manufacturerSourceName").value = source.name ?? "";
+  document.getElementById("manufacturerSourceManufacturerName").value =
+    source.manufacturerName ?? "";
+  document.getElementById("manufacturerSourceBrandName").value = source.brandName ?? "";
+  document.getElementById("manufacturerSourceKind").value = source.sourceKind ?? "catalog";
+  document.getElementById("manufacturerSourceParserKey").value = source.parserKey ?? "generic";
+  document.getElementById("manufacturerSourceUrl").value = source.url ?? "";
+  document.getElementById("manufacturerSourceEnabled").value = String(source.enabled);
+  document.getElementById("manufacturerSourceMaxPages").value = source.maxPages ?? 1;
+  document.getElementById("manufacturerSourceMaxProducts").value = source.maxProducts ?? 50;
+  document.getElementById("manufacturerSourceScrapeDelayMs").value =
+    source.scrapeDelayMs ?? 750;
+
+  const summary = document.getElementById("manufacturerSourcesSummary");
+  if (summary) {
+    summary.textContent = `Editing manufacturer source: ${source.name}.`;
+  }
+
+  setStatus("Manufacturer source loaded for edit", "ready");
+}
+
+async function saveManufacturerSource() {
+  try {
+    const name = getInputValue("manufacturerSourceName");
+    const manufacturerName = getInputValue("manufacturerSourceManufacturerName");
+    const sourceKind = getInputValue("manufacturerSourceKind");
+    const parserKey = getInputValue("manufacturerSourceParserKey");
+    const url = getInputValue("manufacturerSourceUrl");
+
+    if (!name || !manufacturerName || !sourceKind || !parserKey || !url) {
+      throw new Error("Name, manufacturer, source kind, parser key, and URL are required.");
+    }
+
+    const query = encodeQuery({
+      name,
+      manufacturerName,
+      brandName: getInputValue("manufacturerSourceBrandName"),
+      sourceKind,
+      parserKey,
+      url,
+      enabled: getInputValue("manufacturerSourceEnabled"),
+      maxPages: getInputValue("manufacturerSourceMaxPages"),
+      maxProducts: getInputValue("manufacturerSourceMaxProducts"),
+      scrapeDelayMs: getInputValue("manufacturerSourceScrapeDelayMs"),
+    });
+
+    const data = await apiGet(`/api/tracked-manufacturer-sources/upsert?${query}`);
+
+    const summary = document.getElementById("manufacturerSourcesSummary");
+    if (summary) {
+      summary.textContent = `${data.action === "created" ? "Created" : "Updated"} manufacturer source: ${data.data?.name ?? name}.`;
+    }
+
+    await loadManufacturerSources();
+    setStatus("Manufacturer source saved", "ready");
+  } catch (error) {
+    const summary = document.getElementById("manufacturerSourcesSummary");
+    if (summary) {
+      summary.textContent = `Save manufacturer source error: ${error.message}`;
+    }
+
+    setStatus("Error", "error");
+  }
+}
+
+async function loadManufacturerSources() {
+  try {
+    const query = encodeQuery({
+      manufacturerName: getInputValue("manufacturerSourceManufacturerFilter"),
+      brandName: getInputValue("manufacturerSourceBrandFilter"),
+      sourceKind: getInputValue("manufacturerSourceKindFilter"),
+      parserKey: getInputValue("manufacturerSourceParserKeyFilter"),
+      enabled: getInputValue("manufacturerSourceEnabledFilter"),
+    });
+
+    const data = await apiGet(`/api/tracked-manufacturer-sources?${query}`);
+    renderManufacturerSources(data);
+  } catch (error) {
+    document.getElementById("manufacturerSourcesTable").innerHTML =
+      `<pre>${escapeHtml(error.message)}</pre>`;
+    setStatus("Error", "error");
+  }
+}
+
+async function setManufacturerSourceEnabledFromEncoded(encodedSourceId, enabledValue) {
+  try {
+    const sourceId = decodeURIComponent(encodedSourceId);
+    const enabled = enabledValue === "true";
+
+    const data = await apiGet(
+      `/api/tracked-manufacturer-sources/set-enabled?id=${encodeURIComponent(
+        sourceId
+      )}&enabled=${enabled}`
+    );
+
+    const summary = document.getElementById("manufacturerSourcesSummary");
+    if (summary) {
+      summary.textContent = `${data.data?.name ?? "Manufacturer source"} set to ${enabled ? "enabled" : "disabled"}.`;
+    }
+
+    await loadManufacturerSources();
+  } catch (error) {
+    const summary = document.getElementById("manufacturerSourcesSummary");
+    if (summary) {
+      summary.textContent = `Enable/disable manufacturer source error: ${error.message}`;
+    }
+
+    setStatus("Error", "error");
+  }
+}
+
+function renderManufacturerSources(data) {
+  lastManufacturerSources = data.data ?? [];
+
+  const summary = document.getElementById("manufacturerSourcesSummary");
+  if (summary) {
+    summary.textContent = `Showing ${data.count ?? 0} manufacturer sources.`;
+  }
+
+  const rows = lastManufacturerSources
+    .map((source) => {
+      const encodedSourceId = encodeURIComponent(source.id);
+      const enabledClass = source.enabled ? "enabled" : "disabled";
+      const enabledText = source.enabled ? "enabled" : "disabled";
+      const toggleText = source.enabled ? "Disable" : "Enable";
+      const nextEnabled = source.enabled ? "false" : "true";
+
+      return `
+        <tr class="listing-row">
+          <td>
+            <strong>${escapeHtml(source.name)}</strong><br />
+            <span class="muted">${escapeHtml(source.id)}</span>
+          </td>
+          <td class="cell-url">
+            <a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">
+              ${escapeHtml(source.url)}
+            </a>
+            <br />
+            <span class="muted">${escapeHtml(source.manufacturerName)} • ${escapeHtml(source.brandName || "all brands")}</span>
+          </td>
+          <td>
+            <span class="muted">${escapeHtml(source.sourceKind)} • parser ${escapeHtml(source.parserKey)}</span><br />
+            <span class="muted">pages ${escapeHtml(source.maxPages ?? "—")} • products ${escapeHtml(source.maxProducts ?? "—")} • delay ${escapeHtml(source.scrapeDelayMs ?? "—")}ms</span>
+          </td>
+          <td>
+            <span class="pill ${enabledClass}">${enabledText}</span>
+          </td>
+          <td>
+            <div class="cell-actions">
+              <button class="secondary" onclick="editManufacturerSourceFromEncoded('${encodedSourceId}')">
+                Edit
+              </button>
+              <button
+                class="${source.enabled ? "danger" : "secondary"}"
+                onclick="setManufacturerSourceEnabledFromEncoded('${encodedSourceId}', '${nextEnabled}')"
+              >
+                ${toggleText}
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  document.getElementById("manufacturerSourcesTable").innerHTML = `
+    <table class="source-table">
+      <colgroup>
+        <col />
+        <col />
+        <col />
+        <col />
+        <col />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>URL</th>
+          <th>Config</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>${rows || `<tr><td colspan="5">No manufacturer sources found.</td></tr>`}</tbody>
+    </table>
+  `;
+}
+
 async function loadCatalogBalls() {
   try {
     const query = encodeQuery({
@@ -1841,3 +2061,395 @@ loadTrackedSources();
 loadCatalogBalls();
 loadSkippedReviews();
 loadListings();
+(function setupManufacturerSourceControllerSafeV2() {
+  if (window.__manufacturerSourceControllerSafeV2) {
+    return;
+  }
+
+  window.__manufacturerSourceControllerSafeV2 = true;
+
+  const requiredIds = [
+    "manufacturerSourceName",
+    "manufacturerSourceManufacturerName",
+    "manufacturerSourceKind",
+    "manufacturerSourceParserKey",
+    "manufacturerSourceUrl",
+  ];
+
+  let manufacturerSourcesCache = [];
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function val(id) {
+    return el(id)?.value?.trim() ?? "";
+  }
+
+  function setVal(id, value) {
+    const element = el(id);
+    if (element) element.value = value ?? "";
+  }
+
+  function q(params) {
+    const query = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        query.set(key, value);
+      }
+    });
+
+    return query.toString();
+  }
+
+  async function request(path) {
+    if (typeof setStatus === "function") setStatus("Loading", "loading");
+
+    const response = await fetch(path);
+    const json = await response.json();
+
+    if (!response.ok) {
+      if (typeof setStatus === "function") setStatus("Error", "error");
+      throw new Error(json.details || json.error || "Request failed");
+    }
+
+    if (typeof setStatus === "function") setStatus("Ready", "ready");
+    return json.data;
+  }
+
+  function escapeLocal(value) {
+    if (typeof escapeHtml === "function") return escapeHtml(value);
+
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function summary(message) {
+    const box = el("manufacturerSourcesSummary");
+    if (box) box.textContent = message;
+  }
+
+  function clearTint(id) {
+    const input = el(id);
+    if (input && input.value.trim()) {
+      input.classList.remove("required-empty");
+    }
+  }
+
+  function markRequired() {
+    let valid = true;
+
+    requiredIds.forEach((id) => {
+      const input = el(id);
+      if (!input) return;
+
+      const missing = !input.value.trim();
+      input.classList.toggle("required-empty", missing);
+
+      if (missing) valid = false;
+    });
+
+    return valid;
+  }
+
+  window.clearManufacturerSourceForm = function () {
+    setVal("manufacturerSourceName", "");
+    setVal("manufacturerSourceManufacturerName", "");
+    setVal("manufacturerSourceBrandName", "");
+    setVal("manufacturerSourceKind", "catalog");
+    setVal("manufacturerSourceParserKey", "motiv");
+    setVal("manufacturerSourceUrl", "");
+    setVal("manufacturerSourceEnabled", "true");
+    setVal("manufacturerSourceMaxPages", "1");
+    setVal("manufacturerSourceMaxProducts", "50");
+    setVal("manufacturerSourceScrapeDelayMs", "750");
+
+    requiredIds.forEach((id) => el(id)?.classList.remove("required-empty"));
+    summary("Manufacturer source form cleared.");
+  };
+
+  window.saveManufacturerSource = async function () {
+    try {
+      if (!markRequired()) {
+        summary("Fill in the required fields marked with *.");
+        if (typeof setStatus === "function") setStatus("Missing required fields", "error");
+        return;
+      }
+
+      const query = q({
+        name: val("manufacturerSourceName"),
+        manufacturerName: val("manufacturerSourceManufacturerName"),
+        brandName: val("manufacturerSourceBrandName"),
+        sourceKind: val("manufacturerSourceKind"),
+        parserKey: val("manufacturerSourceParserKey"),
+        url: val("manufacturerSourceUrl"),
+        enabled: val("manufacturerSourceEnabled"),
+        maxPages: val("manufacturerSourceMaxPages"),
+        maxProducts: val("manufacturerSourceMaxProducts"),
+        scrapeDelayMs: val("manufacturerSourceScrapeDelayMs"),
+      });
+
+      const data = await request(`/api/tracked-manufacturer-sources/upsert?${query}`);
+
+      summary(`${data.action === "created" ? "Created" : "Updated"} manufacturer source: ${data.data?.name ?? val("manufacturerSourceName")}.`);
+
+      await window.loadManufacturerSources();
+    } catch (error) {
+      summary(`Save manufacturer source error: ${error.message}`);
+      if (typeof setStatus === "function") setStatus("Error", "error");
+    }
+  };
+
+  window.loadManufacturerSources = async function () {
+    try {
+      const query = q({
+        manufacturerName: val("manufacturerSourceManufacturerFilter"),
+        brandName: val("manufacturerSourceBrandFilter"),
+        sourceKind: val("manufacturerSourceKindFilter"),
+        parserKey: val("manufacturerSourceParserKeyFilter"),
+        enabled: val("manufacturerSourceEnabledFilter"),
+      });
+
+      const data = await request(`/api/tracked-manufacturer-sources?${query}`);
+      window.renderManufacturerSources(data);
+    } catch (error) {
+      const table = el("manufacturerSourcesTable");
+      if (table) table.innerHTML = `<pre>${escapeLocal(error.message)}</pre>`;
+
+      summary(`Load manufacturer sources error: ${error.message}`);
+      if (typeof setStatus === "function") setStatus("Error", "error");
+    }
+  };
+
+  window.editManufacturerSourceFromEncoded = function (encodedSourceId) {
+    const sourceId = decodeURIComponent(encodedSourceId);
+    const source = manufacturerSourcesCache.find((item) => item.id === sourceId);
+
+    if (!source) {
+      summary(`Could not find manufacturer source: ${sourceId}`);
+      return;
+    }
+
+    setVal("manufacturerSourceName", source.name ?? "");
+    setVal("manufacturerSourceManufacturerName", source.manufacturerName ?? "");
+    setVal("manufacturerSourceBrandName", source.brandName ?? "");
+    setVal("manufacturerSourceKind", source.sourceKind ?? "catalog");
+    setVal("manufacturerSourceParserKey", source.parserKey ?? "generic");
+    setVal("manufacturerSourceUrl", source.url ?? "");
+    setVal("manufacturerSourceEnabled", String(source.enabled));
+    setVal("manufacturerSourceMaxPages", source.maxPages ?? 1);
+    setVal("manufacturerSourceMaxProducts", source.maxProducts ?? 50);
+    setVal("manufacturerSourceScrapeDelayMs", source.scrapeDelayMs ?? 750);
+
+    requiredIds.forEach(clearTint);
+    summary(`Editing manufacturer source: ${source.name}.`);
+  };
+
+  window.setManufacturerSourceEnabledFromEncoded = async function (encodedSourceId, enabledValue) {
+    try {
+      const sourceId = decodeURIComponent(encodedSourceId);
+      const enabled = enabledValue === "true";
+
+      const data = await request(
+        `/api/tracked-manufacturer-sources/set-enabled?id=${encodeURIComponent(sourceId)}&enabled=${enabled}`
+      );
+
+      summary(`${data.data?.name ?? "Manufacturer source"} set to ${enabled ? "enabled" : "disabled"}.`);
+      await window.loadManufacturerSources();
+    } catch (error) {
+      summary(`Enable/disable manufacturer source error: ${error.message}`);
+      if (typeof setStatus === "function") setStatus("Error", "error");
+    }
+  };
+
+  window.renderManufacturerSources = function (data) {
+    manufacturerSourcesCache = data.data ?? [];
+    summary(`Showing ${data.count ?? 0} manufacturer sources.`);
+
+    const rows = manufacturerSourcesCache
+      .map((source) => {
+        const encodedSourceId = encodeURIComponent(source.id);
+        const enabledClass = source.enabled ? "enabled" : "disabled";
+        const enabledText = source.enabled ? "enabled" : "disabled";
+        const toggleText = source.enabled ? "Disable" : "Enable";
+        const nextEnabled = source.enabled ? "false" : "true";
+
+        return `
+          <tr class="listing-row">
+            <td>
+              <strong>${escapeLocal(source.name)}</strong><br />
+              <span class="muted">${escapeLocal(source.id)}</span>
+            </td>
+            <td class="cell-url">
+              <a href="${escapeLocal(source.url)}" target="_blank" rel="noreferrer">${escapeLocal(source.url)}</a>
+              <br />
+              <span class="muted">${escapeLocal(source.manufacturerName)} • ${escapeLocal(source.brandName || "all brands")}</span>
+            </td>
+            <td>
+              <span class="muted">${escapeLocal(source.sourceKind)} • parser ${escapeLocal(source.parserKey)}</span><br />
+              <span class="muted">pages ${escapeLocal(source.maxPages ?? "—")} • products ${escapeLocal(source.maxProducts ?? "—")} • delay ${escapeLocal(source.scrapeDelayMs ?? "—")}ms</span>
+            </td>
+            <td><span class="pill ${enabledClass}">${enabledText}</span></td>
+            <td>
+              <div class="cell-actions">
+                <button class="secondary" onclick="editManufacturerSourceFromEncoded('${encodedSourceId}')">Edit</button>
+                <button class="${source.enabled ? "danger" : "secondary"}" onclick="setManufacturerSourceEnabledFromEncoded('${encodedSourceId}', '${nextEnabled}')">${toggleText}</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const table = el("manufacturerSourcesTable");
+    if (table) {
+      table.innerHTML = `
+        <table class="source-table">
+          <colgroup><col /><col /><col /><col /><col /></colgroup>
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>URL</th>
+              <th>Config</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>${rows || `<tr><td colspan="5">No manufacturer sources found.</td></tr>`}</tbody>
+        </table>
+      `;
+    }
+  };
+
+  function bindButton(id, handler) {
+    const button = el(id);
+    if (!button || button.dataset.safeBoundV2 === "true") return;
+
+    button.dataset.safeBoundV2 = "true";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      handler();
+    });
+  }
+
+  bindButton("saveManufacturerSourceBtn", window.saveManufacturerSource);
+  bindButton("clearManufacturerSourceFormBtn", window.clearManufacturerSourceForm);
+  bindButton("loadManufacturerSourcesBtn", window.loadManufacturerSources);
+
+  requiredIds.forEach((id) => {
+    const input = el(id);
+    if (!input || input.dataset.requiredTintBoundV2 === "true") return;
+
+    input.dataset.requiredTintBoundV2 = "true";
+    input.addEventListener("input", () => clearTint(id));
+    input.addEventListener("change", () => clearTint(id));
+  });
+})();
+
+(function setupManufacturerSourceRunButtonV1() {
+  if (window.__manufacturerSourceRunButtonV1) return;
+  window.__manufacturerSourceRunButtonV1 = true;
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function escapeLocal(value) {
+    if (typeof escapeHtml === "function") return escapeHtml(value);
+
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function setManufacturerSummary(message) {
+    const summary = el("manufacturerSourcesSummary");
+    if (summary) summary.textContent = message;
+  }
+
+  async function runManufacturerSource(sourceId) {
+    try {
+      if (typeof setStatus === "function") setStatus("Running manufacturer source", "loading");
+
+      setManufacturerSummary("Running manufacturer source sync...");
+
+      const response = await fetch(
+        `/api/tracked-manufacturer-sources/run?id=${encodeURIComponent(sourceId)}`
+      );
+
+      const json = await response.json();
+
+      if (!response.ok) {
+        throw new Error(json.details || json.error || "Run failed");
+      }
+
+      const result = json.data?.result;
+      const discovered = result?.discoveredCount ?? result?.itemsFound ?? 0;
+      const parsed = result?.parsedCount ?? 0;
+      const created = result?.itemsCreated ?? 0;
+      const updated = result?.itemsUpdated ?? 0;
+      const removed = result?.itemsRemoved ?? 0;
+      const failed = result?.failureCount ?? 0;
+
+      setManufacturerSummary(
+        `Manufacturer sync finished. Discovered ${discovered}, parsed ${parsed}, created ${created}, updated ${updated}, removed ${removed}, failures ${failed}.`
+      );
+
+      if (typeof loadCatalogBalls === "function") {
+        await loadCatalogBalls();
+      }
+
+      if (typeof setStatus === "function") setStatus("Manufacturer sync complete", "ready");
+    } catch (error) {
+      setManufacturerSummary(`Manufacturer sync error: ${error.message}`);
+      if (typeof setStatus === "function") setStatus("Error", "error");
+    }
+  }
+
+  window.runManufacturerSourceFromEncoded = function (encodedSourceId) {
+    runManufacturerSource(decodeURIComponent(encodedSourceId));
+  };
+
+  const originalRender = window.renderManufacturerSources;
+
+  window.renderManufacturerSources = function (data) {
+    originalRender(data);
+
+    const table = el("manufacturerSourcesTable");
+    if (!table) return;
+
+    table.querySelectorAll("tbody tr").forEach((row) => {
+      const editButton = row.querySelector("button.secondary");
+      if (!editButton) return;
+
+      const onclick = editButton.getAttribute("onclick") || "";
+      const match = onclick.match(/editManufacturerSourceFromEncoded\('([^']+)'\)/);
+      if (!match) return;
+
+      const encodedSourceId = match[1];
+
+      if (row.querySelector(".run-manufacturer-source-btn")) return;
+
+      const actions = row.querySelector(".cell-actions");
+      if (!actions) return;
+
+      const runButton = document.createElement("button");
+      runButton.className = "secondary run-manufacturer-source-btn";
+      runButton.textContent = "Run";
+      runButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        window.runManufacturerSourceFromEncoded(encodedSourceId);
+      });
+
+      actions.insertBefore(runButton, actions.firstChild);
+    });
+  };
+})();

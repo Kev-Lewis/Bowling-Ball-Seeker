@@ -156,3 +156,26 @@ model TrackedRetailerSource {
   @@index([sourceKind])
   @@index([enabled])
 }
+
+model TrackedManufacturerSource {
+  id               String   @id
+  name             String
+  manufacturerName String
+  brandName        String?
+  sourceKind       String
+  parserKey        String
+  url              String
+  enabled          Boolean  @default(true)
+  maxPages         Int?
+  maxProducts      Int?
+  scrapeDelayMs    Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([manufacturerName, url])
+  @@index([manufacturerName])
+  @@index([brandName])
+  @@index([sourceKind])
+  @@index([parserKey])
+  @@index([enabled])
+}
