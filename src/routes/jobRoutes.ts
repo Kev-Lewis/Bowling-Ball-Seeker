@@ -4,6 +4,7 @@ import { getLocalSchedulerStatus } from "../scheduler/localScheduler";
 import { runPriceAlertJob } from "../jobs/priceAlertJob";
 import { runDailySystemJob } from "../jobs/dailyJob";
 import {
+  runBowlingComCategoryScrapeJob,
   runBowlingComProductScrapeJob,
   runMockRetailerScrapeJob,
 } from "../jobs/retailerScrapeJob";
@@ -268,6 +269,46 @@ jobRoutes.get("/bowling-com-product-scrape/run", async (req, res) => {
 
     return res.status(500).json({
       error: "Failed to run Bowling.com product scrape job",
+      details: message,
+    });
+  }
+});
+
+jobRoutes.get("/bowling-com-category-scrape/run", async (req, res) => {
+  try {
+    const rawUrl = req.query.url?.toString().trim();
+
+    if (!rawUrl) {
+      return res.status(400).json({
+        error: "Missing required query parameter: url",
+      });
+    }
+
+    const allowLikelyMatch = getBooleanQuery(req.query.allowLikelyMatch, true);
+    const minConfidence = getNumberQuery(req.query.minConfidence, 35);
+    const maxPages = getNumberQuery(req.query.maxPages, 1);
+    const maxProducts = getNumberQuery(req.query.maxProducts, 10);
+
+    const result = await runBowlingComCategoryScrapeJob(rawUrl, {
+      allowLikelyMatch,
+      minConfidence,
+      maxPages,
+      maxProducts,
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown Bowling.com category scrape job error";
+
+    return res.status(500).json({
+      error: "Failed to run Bowling.com category scrape job",
       details: message,
     });
   }
