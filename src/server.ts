@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { ballRoutes } from "./routes/ballRoutes";
+import { priceRoutes } from "./routes/priceRoutes";
 
 dotenv.config();
 
@@ -19,19 +21,8 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.get("/api/balls", (_req, res) => {
-  res.json({
-    message: "Ball catalog endpoint coming soon.",
-    data: [],
-  });
-});
-
-app.get("/api/prices", (_req, res) => {
-  res.json({
-    message: "Price tracking endpoint coming soon.",
-    data: [],
-  });
-});
+app.use("/api/balls", ballRoutes);
+app.use("/api/prices", priceRoutes);
 
 app.listen(PORT, () => {
   console.log(`Bowling Ball Seeker API running on http://localhost:${PORT}`);
