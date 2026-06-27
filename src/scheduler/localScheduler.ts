@@ -61,6 +61,7 @@ async function runScheduledDailyJob() {
     const result = await runDailySystemJob({
       runManufacturerSync: true,
   runRetailerScrape: true,
+  runBowlingComProductScrape: true,
   runPriceAlerts: true,
   retailerScrapeOptions: {
     allowLikelyMatch: true,

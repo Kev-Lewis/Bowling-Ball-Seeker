@@ -3,7 +3,9 @@ import {
   runPriceAlertJob,
   type PriceAlertJobOptions,
 } from "./priceAlertJob";
+import { getBowlingComProductUrlsFromEnv } from "../config/trackedRetailerUrls";
 import {
+  runBowlingComProductScrapeJob,
   runMockRetailerScrapeJob,
   type RetailerScrapeJobOptions,
 } from "./retailerScrapeJob";
@@ -11,7 +13,9 @@ import {
 export interface DailySystemJobOptions {
   runManufacturerSync?: boolean;
   runRetailerScrape?: boolean;
+  runBowlingComProductScrape?: boolean;
   runPriceAlerts?: boolean;
+  bowlingComProductUrls?: string[];
   retailerScrapeOptions?: RetailerScrapeJobOptions;
   priceAlertOptions?: PriceAlertJobOptions;
 }
@@ -20,8 +24,13 @@ export async function runDailySystemJob(options: DailySystemJobOptions = {}) {
   const startedAt = new Date().toISOString();
 
   const runManufacturerSyncStep = options.runManufacturerSync ?? true;
-  const runRetailerScrapeStep = options.runRetailerScrape ?? true;
-  const runPriceAlertsStep = options.runPriceAlerts ?? true;
+const runRetailerScrapeStep = options.runRetailerScrape ?? true;
+const runBowlingComProductScrapeStep =
+  options.runBowlingComProductScrape ?? true;
+const runPriceAlertsStep = options.runPriceAlerts ?? true;
+
+const bowlingComProductUrls =
+  options.bowlingComProductUrls ?? getBowlingComProductUrlsFromEnv();
 
   const steps = [];
   let successfulStepCount = 0;
@@ -108,6 +117,55 @@ export async function runDailySystemJob(options: DailySystemJobOptions = {}) {
       status: "skipped",
     });
   }
+
+  if (runBowlingComProductScrapeStep && bowlingComProductUrls.length > 0) {
+  try {
+    const bowlingComProductScrape = await runBowlingComProductScrapeJob(
+      bowlingComProductUrls,
+      {
+        allowLikelyMatch:
+          options.retailerScrapeOptions?.allowLikelyMatch ?? true,
+        minConfidence: options.retailerScrapeOptions?.minConfidence ?? 35,
+      }
+    );
+
+    const status =
+      bowlingComProductScrape.skippedNoMatchCount > 0 ||
+      bowlingComProductScrape.skippedNeedsReviewCount > 0
+        ? "partial_success"
+        : "success";
+
+    successfulStepCount += 1;
+
+    steps.push({
+      name: "bowling_com_product_scrape",
+      status,
+      data: bowlingComProductScrape,
+    });
+  } catch (error) {
+    failedStepCount += 1;
+
+    steps.push({
+      name: "bowling_com_product_scrape",
+      status: "failed",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unknown Bowling.com product scrape error",
+    });
+  }
+} else {
+  skippedStepCount += 1;
+
+  steps.push({
+    name: "bowling_com_product_scrape",
+    status: "skipped",
+    reason:
+      runBowlingComProductScrapeStep === false
+        ? "Bowling.com product scrape disabled."
+        : "No Bowling.com product URLs configured.",
+  });
+}
 
   if (runPriceAlertsStep) {
     try {

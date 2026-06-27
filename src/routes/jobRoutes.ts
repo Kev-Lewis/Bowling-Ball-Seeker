@@ -40,6 +40,15 @@ function getStringQuery(value: unknown, fallback: string) {
   return parsed || fallback;
 }
 
+function getStringListQuery(value: unknown) {
+  const values = Array.isArray(value) ? value : [value];
+
+  return values
+    .flatMap((item) => item?.toString().split(",") ?? [])
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 jobRoutes.get("/daily-manufacturer-sync/run", async (_req, res) => {
   try {
     const result = await runDailyManufacturerSync();
@@ -154,12 +163,22 @@ const allowLikelyMatch = getBooleanQuery(
   true
 );
 
+const runBowlingComProductScrape = getBooleanQuery(
+  req.query.runBowlingComProductScrape,
+  true
+);
+
+const bowlingComProductUrls = getStringListQuery(req.query.bowlingComUrl);
+
 const minConfidence = getNumberQuery(req.query.minConfidence, 35);
 
     const result = await runDailySystemJob({
   runManufacturerSync,
   runRetailerScrape,
+  runBowlingComProductScrape,
   runPriceAlerts,
+  bowlingComProductUrls:
+    bowlingComProductUrls.length > 0 ? bowlingComProductUrls : undefined,
   retailerScrapeOptions: {
     allowLikelyMatch,
     minConfidence,
