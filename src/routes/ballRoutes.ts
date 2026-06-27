@@ -9,41 +9,61 @@ import {
 
 export const ballRoutes = Router();
 
-ballRoutes.get("/", (req, res) => {
-  const search = req.query.search?.toString();
+ballRoutes.get("/", async (req, res) => {
+  try {
+    const search = req.query.search?.toString();
+    const balls = search ? await searchBalls(search) : await getAllBalls();
 
-  const balls = search ? searchBalls(search) : getAllBalls();
-
-  res.json({
-    count: balls.length,
-    data: balls,
-  });
-});
-
-ballRoutes.get("/current", (_req, res) => {
-  const balls = getCurrentBalls();
-
-  res.json({
-    count: balls.length,
-    data: balls,
-  });
-});
-
-ballRoutes.get("/:id", (req, res) => {
-  const ball = getBallById(req.params.id);
-
-  if (!ball) {
-    return res.status(404).json({
-      error: "Ball not found",
+    return res.json({
+      count: balls.length,
+      data: balls,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Failed to fetch balls",
     });
   }
+});
 
-  const bestVerifiedPrice = getBestVerifiedPrice(ball.id);
+ballRoutes.get("/current", async (_req, res) => {
+  try {
+    const balls = await getCurrentBalls();
 
-  return res.json({
-    data: {
-      ...ball,
-      bestVerifiedPrice,
-    },
-  });
+    return res.json({
+      count: balls.length,
+      data: balls,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Failed to fetch current balls",
+    });
+  }
+});
+
+ballRoutes.get("/:id", async (req, res) => {
+  try {
+    const ball = await getBallById(req.params.id);
+
+    if (!ball) {
+      return res.status(404).json({
+        error: "Ball not found",
+      });
+    }
+
+    const bestVerifiedPrice = await getBestVerifiedPrice(ball.id);
+
+    return res.json({
+      data: {
+        ...ball,
+        bestVerifiedPrice,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Failed to fetch ball",
+    });
+  }
 });

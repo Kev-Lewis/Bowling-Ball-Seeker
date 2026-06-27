@@ -1,50 +1,97 @@
-import { seedBalls } from "../data/seedBalls";
-import { seedRetailerListings } from "../data/seedRetailerListings";
+import { prisma } from "../db/prisma";
 
-export function getAllBalls() {
-  return seedBalls;
+function formatBall(ball: any) {
+  return {
+    ...ball,
+    availableWeights: ball.availableWeightsJson
+      ? JSON.parse(ball.availableWeightsJson)
+      : [],
+    availableWeightsJson: undefined,
+  };
 }
 
-export function getCurrentBalls() {
-  return seedBalls.filter((ball) => ball.isCurrent);
+export async function getAllBalls() {
+  const balls = await prisma.ball.findMany({
+    orderBy: [{ brand: "asc" }, { canonicalName: "asc" }],
+  });
+
+  return balls.map(formatBall);
 }
 
-export function getBallById(id: string) {
-  return seedBalls.find((ball) => ball.id === id);
+export async function getCurrentBalls() {
+  const balls = await prisma.ball.findMany({
+    where: {
+      isCurrent: true,
+    },
+    orderBy: [{ brand: "asc" }, { canonicalName: "asc" }],
+  });
+
+  return balls.map(formatBall);
 }
 
-export function searchBalls(query: string) {
-  const normalizedQuery = query.toLowerCase().trim();
+export async function getBallById(id: string) {
+  const ball = await prisma.ball.findUnique({
+    where: {
+      id,
+    },
+  });
 
-  return seedBalls.filter((ball) => {
-    return (
-      ball.canonicalName.toLowerCase().includes(normalizedQuery) ||
-      ball.brand.toLowerCase().includes(normalizedQuery) ||
-      ball.manufacturer.toLowerCase().includes(normalizedQuery)
-    );
+  return ball ? formatBall(ball) : null;
+}
+
+export async function searchBalls(query: string) {
+  const normalizedQuery = query.trim();
+
+  const balls = await prisma.ball.findMany({
+    where: {
+      OR: [
+        {
+          canonicalName: {
+            contains: normalizedQuery,
+          },
+        },
+        {
+          brand: {
+            contains: normalizedQuery,
+          },
+        },
+        {
+          manufacturer: {
+            contains: normalizedQuery,
+          },
+        },
+      ],
+    },
+    orderBy: [{ brand: "asc" }, { canonicalName: "asc" }],
+  });
+
+  return balls.map(formatBall);
+}
+
+export async function getListingsForBall(ballId: string) {
+  return prisma.retailerListing.findMany({
+    where: {
+      ballId,
+    },
+    orderBy: [{ currentPrice: "asc" }],
   });
 }
 
-export function getListingsForBall(ballId: string) {
-  return seedRetailerListings.filter((listing) => listing.ballId === ballId);
-}
-
-export function getBestVerifiedPrice(ballId: string) {
-  const listings = seedRetailerListings.filter((listing) => {
-    return (
-      listing.ballId === ballId &&
-      listing.condition === "new" &&
-      listing.stockStatus === "in_stock" &&
-      listing.retailerType === "verified_retailer" &&
-      listing.matchConfidence >= 95
-    );
+export async function getBestVerifiedPrice(ballId: string) {
+  const listing = await prisma.retailerListing.findFirst({
+    where: {
+      ballId,
+      condition: "new",
+      stockStatus: "in_stock",
+      retailerType: "verified_retailer",
+      matchConfidence: {
+        gte: 95,
+      },
+    },
+    orderBy: {
+      currentPrice: "asc",
+    },
   });
 
-  if (listings.length === 0) {
-    return null;
-  }
-
-  return listings.reduce((lowest, current) => {
-    return current.currentPrice < lowest.currentPrice ? current : lowest;
-  });
+  return listing;
 }

@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Ball {
+  id                    String   @id
+  canonicalName         String
+  brand                 String
+  manufacturer          String
+  coverstockName        String?
+  coverstockType        String
+  coreName              String?
+  coreType              String
+  factoryFinish         String?
+  rg                    Float?
+  differential          Float?
+  mbDifferential        Float?
+  availableWeightsJson  String?
+  officialUrl           String?
+  imageUrl              String?
+  isCurrent             Boolean  @default(true)
+  firstSeenAt           DateTime
+  lastSeenAt            DateTime
+  removedFromLineupAt   DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  listings              RetailerListing[]
+
+  @@index([canonicalName])
+  @@index([brand])
+  @@index([isCurrent])
+}
+
+model RetailerListing {
+  id                String   @id
+  ballId            String
+  retailerName      String
+  retailerType      String
+  listingTitle      String
+  listingUrl        String
+  condition         String
+  matchConfidence   Int
+  matchStatus       String
+  currentPrice      Float
+  stockStatus       String
+  lastCheckedAt     DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  ball              Ball            @relation(fields: [ballId], references: [id])
+  priceHistory      PriceSnapshot[]
+
+  @@index([ballId])
+  @@index([retailerName])
+  @@index([stockStatus])
+}
+
+model PriceSnapshot {
+  id                  String   @id
+  retailerListingId   String
+  price               Float
+  stockStatus         String
+  checkedAt           DateTime
+  createdAt           DateTime @default(now())
+
+  listing             RetailerListing @relation(fields: [retailerListingId], references: [id])
+
+  @@index([retailerListingId])
+  @@index([checkedAt])
+}
