@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma";
+import { getCatalogStatus } from "../utils/catalogStatus";
 
 function formatBall(ball: any) {
   return {
@@ -7,6 +8,7 @@ function formatBall(ball: any) {
       ? JSON.parse(ball.availableWeightsJson)
       : [],
     availableWeightsJson: undefined,
+    ...getCatalogStatus(ball),
   };
 }
 
