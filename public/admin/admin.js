@@ -391,6 +391,97 @@ async function runCategoryScrape() {
   }
 }
 
+function clearTrackedSourceForm() {
+  document.getElementById("trackedSourceName").value = "";
+  document.getElementById("trackedSourceRetailerName").value = "bowling.com";
+  document.getElementById("trackedSourceKind").value = "category";
+  document.getElementById("trackedSourceUrl").value = "";
+  document.getElementById("trackedSourceEnabled").value = "true";
+  document.getElementById("trackedSourceAllowLikelyMatch").value = "true";
+  document.getElementById("trackedSourceMaxPages").value = "1";
+  document.getElementById("trackedSourceMaxProducts").value = "5";
+  document.getElementById("trackedSourceScrapeDelayMs").value = "750";
+
+  const summary = document.getElementById("trackedSourcesSummary");
+  if (summary) {
+    summary.textContent = "Tracked source form cleared.";
+  }
+}
+
+function editTrackedSourceFromEncoded(encodedSourceId) {
+  editTrackedSource(decodeURIComponent(encodedSourceId));
+}
+
+function editTrackedSource(sourceId) {
+  const source = getTrackedSourceById(sourceId);
+
+  if (!source) {
+    setStatus("Error", "error");
+    return;
+  }
+
+  document.getElementById("trackedSourceName").value = source.name ?? "";
+  document.getElementById("trackedSourceRetailerName").value = source.retailerName ?? "bowling.com";
+  document.getElementById("trackedSourceKind").value = source.sourceKind ?? "category";
+  document.getElementById("trackedSourceUrl").value = source.url ?? "";
+  document.getElementById("trackedSourceEnabled").value = String(source.enabled);
+  document.getElementById("trackedSourceAllowLikelyMatch").value = String(source.allowLikelyMatch);
+  document.getElementById("trackedSourceMaxPages").value = source.maxPages ?? 1;
+  document.getElementById("trackedSourceMaxProducts").value = source.maxProducts ?? 5;
+  document.getElementById("trackedSourceScrapeDelayMs").value = source.scrapeDelayMs ?? 750;
+
+  const summary = document.getElementById("trackedSourcesSummary");
+  if (summary) {
+    summary.textContent = `Editing tracked source: ${source.name}.`;
+  }
+
+  setStatus("Source loaded for edit", "ready");
+}
+
+async function saveTrackedSource() {
+  try {
+    const name = getInputValue("trackedSourceName");
+    const retailerName = getInputValue("trackedSourceRetailerName");
+    const sourceKind = getInputValue("trackedSourceKind");
+    const url = getInputValue("trackedSourceUrl");
+
+    if (!name || !retailerName || !sourceKind || !url) {
+      throw new Error("Source name, retailer name, source kind, and URL are required.");
+    }
+
+    const query = encodeQuery({
+      name,
+      retailerName,
+      sourceKind,
+      url,
+      enabled: getInputValue("trackedSourceEnabled"),
+      maxPages: getInputValue("trackedSourceMaxPages"),
+      maxProducts: getInputValue("trackedSourceMaxProducts"),
+      scrapeDelayMs: getInputValue("trackedSourceScrapeDelayMs"),
+      allowLikelyMatch: getInputValue("trackedSourceAllowLikelyMatch"),
+    });
+
+    const data = await apiGet(`/api/tracked-retailer-sources/upsert?${query}`);
+
+    const summary = document.getElementById("trackedSourcesSummary");
+    if (summary) {
+      summary.textContent = `${data.action === "created" ? "Created" : "Updated"} tracked source: ${
+        data.data?.name ?? name
+      }.`;
+    }
+
+    await loadTrackedSources();
+    setStatus("Source saved", "ready");
+  } catch (error) {
+    const summary = document.getElementById("trackedSourcesSummary");
+    if (summary) {
+      summary.textContent = `Save source error: ${error.message}`;
+    }
+
+    setStatus("Error", "error");
+  }
+}
+
 async function loadTrackedSources() {
   try {
     const query = encodeQuery({
@@ -481,6 +572,9 @@ function renderTrackedSources(data) {
               <button onclick="runTrackedSourceFromEncoded('${encodedSourceId}')">Run</button>
               <button class="secondary" onclick="useTrackedSourceFromEncoded('${encodedSourceId}')">
                 Use
+              </button>
+              <button class="secondary" onclick="editTrackedSourceFromEncoded('${encodedSourceId}')">
+                Edit
               </button>
               <button
                 class="${source.enabled ? "danger" : "secondary"}"
@@ -1002,6 +1096,14 @@ setupCandidatePreviewModal();
 document
   .getElementById("runCategoryScrapeBtn")
   .addEventListener("click", runCategoryScrape);
+
+document
+  .getElementById("saveTrackedSourceBtn")
+  .addEventListener("click", saveTrackedSource);
+
+document
+  .getElementById("clearTrackedSourceFormBtn")
+  .addEventListener("click", clearTrackedSourceForm);
 
 document
   .getElementById("loadTrackedSourcesBtn")

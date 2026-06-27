@@ -335,10 +335,6 @@
         line-height: 1.25;
       }
 
-      .summary-card-value.is-small {
-        font-size: 1rem;
-      }
-
       .dashboard-stack {
         display: grid;
         gap: 16px;
@@ -431,10 +427,6 @@
         color: var(--muted);
         font-size: 0.92rem;
         line-height: 1.35;
-      }
-
-      .widget-description[hidden] {
-        display: none;
       }
 
       .widget-body {
@@ -1115,7 +1107,68 @@
           </div>
 
           <div class="widget-body">
-            <div class="grid grid-3">
+            <div class="output-summary">
+              Add a new tracked retailer/category source or edit one from the table below.
+            </div>
+
+            <div class="grid grid-3" style="margin-top: 16px">
+              <div>
+                <label for="trackedSourceName">Source Name</label>
+                <input id="trackedSourceName" placeholder="Bowling.com Storm Category" />
+              </div>
+              <div>
+                <label for="trackedSourceRetailerName">Retailer Name</label>
+                <input id="trackedSourceRetailerName" value="bowling.com" />
+              </div>
+              <div>
+                <label for="trackedSourceKind">Source Kind</label>
+                <select id="trackedSourceKind">
+                  <option value="category" selected>category</option>
+                  <option value="product">product</option>
+                </select>
+              </div>
+              <div>
+                <label for="trackedSourceUrl">Source URL</label>
+                <input id="trackedSourceUrl" placeholder="https://www.bowling.com/shopping/..." />
+              </div>
+              <div>
+                <label for="trackedSourceEnabled">Enabled</label>
+                <select id="trackedSourceEnabled">
+                  <option value="true" selected>true</option>
+                  <option value="false">false</option>
+                </select>
+              </div>
+              <div>
+                <label for="trackedSourceAllowLikelyMatch">Allow Likely Match</label>
+                <select id="trackedSourceAllowLikelyMatch">
+                  <option value="true" selected>true</option>
+                  <option value="false">false</option>
+                </select>
+              </div>
+              <div>
+                <label for="trackedSourceMaxPages">Max Pages</label>
+                <input id="trackedSourceMaxPages" type="number" value="1" />
+              </div>
+              <div>
+                <label for="trackedSourceMaxProducts">Max Products</label>
+                <input id="trackedSourceMaxProducts" type="number" value="5" />
+              </div>
+              <div>
+                <label for="trackedSourceScrapeDelayMs">Scrape Delay MS</label>
+                <input id="trackedSourceScrapeDelayMs" type="number" value="750" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-top: 16px">
+              <button id="saveTrackedSourceBtn">Save Source</button>
+              <button id="clearTrackedSourceFormBtn" class="secondary">Clear Form</button>
+            </div>
+
+            <div class="output-summary" style="margin-top: 20px">
+              Filter saved tracked sources.
+            </div>
+
+            <div class="grid grid-3" style="margin-top: 16px">
               <div>
                 <label for="trackedRetailerNameFilter">Retailer Name</label>
                 <input id="trackedRetailerNameFilter" value="bowling.com" />
