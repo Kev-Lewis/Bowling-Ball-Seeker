@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma";
 import { getCatalogStatus } from "../utils/catalogStatus";
+import type { BallSearchFilters } from "../types/ballFilters";
 
 function formatBall(ball: any) {
   return {
@@ -10,6 +11,79 @@ function formatBall(ball: any) {
     availableWeightsJson: undefined,
     ...getCatalogStatus(ball),
   };
+}
+
+export async function getBalls(filters: BallSearchFilters = {}) {
+  const where: any = {};
+
+  if (filters.search) {
+    where.OR = [
+      {
+        canonicalName: {
+          contains: filters.search,
+        },
+      },
+      {
+        brand: {
+          contains: filters.search,
+        },
+      },
+      {
+        manufacturer: {
+          contains: filters.search,
+        },
+      },
+      {
+        coverstockName: {
+          contains: filters.search,
+        },
+      },
+      {
+        coreName: {
+          contains: filters.search,
+        },
+      },
+    ];
+  }
+
+  if (filters.brand) {
+    where.brand = {
+      contains: filters.brand,
+    };
+  }
+
+  if (filters.manufacturer) {
+    where.manufacturer = {
+      contains: filters.manufacturer,
+    };
+  }
+
+  if (filters.coverstockType) {
+    where.coverstockType = filters.coverstockType;
+  }
+
+  if (filters.coreType) {
+    where.coreType = filters.coreType;
+  }
+
+  if (typeof filters.isCurrent === "boolean") {
+    where.isCurrent = filters.isCurrent;
+  }
+
+  const balls = await prisma.ball.findMany({
+    where,
+    orderBy: [{ brand: "asc" }, { canonicalName: "asc" }],
+  });
+
+  const formattedBalls = balls.map(formatBall);
+
+  if (filters.catalogStatus) {
+    return formattedBalls.filter((ball) => {
+      return ball.catalogStatus === filters.catalogStatus;
+    });
+  }
+
+  return formattedBalls;
 }
 
 export async function getAllBalls() {

@@ -4,6 +4,7 @@ import { Router } from "express";
 import {
   getAllBalls,
   getBallById,
+  getBalls,
   getBestVerifiedPrice,
   getCurrentBalls,
   searchBalls,
@@ -14,14 +15,48 @@ export const ballRoutes = Router();
 ballRoutes.get("/", async (req, res) => {
   try {
     const search = req.query.search?.toString();
-    const balls = search ? await searchBalls(search) : await getAllBalls();
+    const brand = req.query.brand?.toString();
+    const manufacturer = req.query.manufacturer?.toString();
+    const coverstockType = req.query.coverstockType?.toString();
+    const coreType = req.query.coreType?.toString();
+    const catalogStatus = req.query.catalogStatus?.toString() as any;
+
+    let isCurrent: boolean | undefined;
+
+    if (req.query.isCurrent === "true") {
+      isCurrent = true;
+    }
+
+    if (req.query.isCurrent === "false") {
+      isCurrent = false;
+    }
+
+    const balls = await getBalls({
+      search,
+      brand,
+      manufacturer,
+      coverstockType,
+      coreType,
+      isCurrent,
+      catalogStatus,
+    });
 
     return res.json({
       count: balls.length,
+      filters: {
+        search,
+        brand,
+        manufacturer,
+        coverstockType,
+        coreType,
+        isCurrent,
+        catalogStatus,
+      },
       data: balls,
     });
   } catch (error) {
     console.error(error);
+
     return res.status(500).json({
       error: "Failed to fetch balls",
     });
