@@ -62,6 +62,7 @@ async function runScheduledDailyJob() {
       runManufacturerSync: true,
   runRetailerScrape: true,
   runBowlingComProductScrape: true,
+  runBowlingComCategoryScrape: true,
   runPriceAlerts: true,
   retailerScrapeOptions: {
     allowLikelyMatch: true,

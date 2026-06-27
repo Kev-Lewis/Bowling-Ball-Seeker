@@ -130,6 +130,23 @@ jobRoutes.get("/daily/run", async (req, res) => {
     const minPriceDrop = getNumberQuery(req.query.minPriceDrop, 5);
     const minPercentDrop = getNumberQuery(req.query.minPercentDrop, 0);
 
+    const runBowlingComCategoryScrape = getBooleanQuery(
+  req.query.runBowlingComCategoryScrape,
+  true
+);
+
+const bowlingComCategoryUrls = getStringListQuery(req.query.bowlingComCategoryUrl);
+
+const bowlingComCategoryMaxPages = getNumberQuery(
+  req.query.bowlingComCategoryMaxPages,
+  1
+);
+
+const bowlingComCategoryMaxProducts = getNumberQuery(
+  req.query.bowlingComCategoryMaxProducts,
+  10
+);
+
     const includeStockChanges = getBooleanQuery(
       req.query.includeStockChanges,
       true
@@ -184,6 +201,15 @@ const minConfidence = getNumberQuery(req.query.minConfidence, 35);
     allowLikelyMatch,
     minConfidence,
   },
+  runBowlingComCategoryScrape,
+bowlingComCategoryUrls:
+  bowlingComCategoryUrls.length > 0 ? bowlingComCategoryUrls : undefined,
+bowlingComCategoryScrapeOptions: {
+  allowLikelyMatch,
+  minConfidence,
+  maxPages: bowlingComCategoryMaxPages,
+  maxProducts: bowlingComCategoryMaxProducts,
+},
   priceAlertOptions: {
     days,
     limit,

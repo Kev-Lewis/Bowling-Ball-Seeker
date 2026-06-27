@@ -3,10 +3,17 @@ import {
   runPriceAlertJob,
   type PriceAlertJobOptions,
 } from "./priceAlertJob";
-import { getBowlingComProductUrlsFromEnv } from "../config/trackedRetailerUrls";
 import {
+  getBowlingComCategoryMaxPagesFromEnv,
+  getBowlingComCategoryMaxProductsFromEnv,
+  getBowlingComCategoryUrlsFromEnv,
+  getBowlingComProductUrlsFromEnv,
+} from "../config/trackedRetailerUrls";
+import {
+  runBowlingComCategoryScrapeJob,
   runBowlingComProductScrapeJob,
   runMockRetailerScrapeJob,
+  type BowlingComCategoryScrapeJobOptions,
   type RetailerScrapeJobOptions,
 } from "./retailerScrapeJob";
 
@@ -14,14 +21,31 @@ export interface DailySystemJobOptions {
   runManufacturerSync?: boolean;
   runRetailerScrape?: boolean;
   runBowlingComProductScrape?: boolean;
+  runBowlingComCategoryScrape?: boolean;
   runPriceAlerts?: boolean;
   bowlingComProductUrls?: string[];
+  bowlingComCategoryUrls?: string[];
   retailerScrapeOptions?: RetailerScrapeJobOptions;
+  bowlingComCategoryScrapeOptions?: BowlingComCategoryScrapeJobOptions;
   priceAlertOptions?: PriceAlertJobOptions;
 }
 
 export async function runDailySystemJob(options: DailySystemJobOptions = {}) {
   const startedAt = new Date().toISOString();
+
+  const runBowlingComCategoryScrapeStep =
+  options.runBowlingComCategoryScrape ?? true;
+
+const bowlingComCategoryUrls =
+  options.bowlingComCategoryUrls ?? getBowlingComCategoryUrlsFromEnv();
+
+const bowlingComCategoryMaxPages =
+  options.bowlingComCategoryScrapeOptions?.maxPages ??
+  getBowlingComCategoryMaxPagesFromEnv();
+
+const bowlingComCategoryMaxProducts =
+  options.bowlingComCategoryScrapeOptions?.maxProducts ??
+  getBowlingComCategoryMaxProductsFromEnv();
 
   const runManufacturerSyncStep = options.runManufacturerSync ?? true;
 const runRetailerScrapeStep = options.runRetailerScrape ?? true;
@@ -164,6 +188,78 @@ const bowlingComProductUrls =
       runBowlingComProductScrapeStep === false
         ? "Bowling.com product scrape disabled."
         : "No Bowling.com product URLs configured.",
+  });
+}
+
+if (runBowlingComCategoryScrapeStep && bowlingComCategoryUrls.length > 0) {
+  try {
+    const categoryResults = [];
+
+    for (const categoryUrl of bowlingComCategoryUrls) {
+      const categoryScrape = await runBowlingComCategoryScrapeJob(
+        categoryUrl,
+        {
+          allowLikelyMatch:
+            options.retailerScrapeOptions?.allowLikelyMatch ?? true,
+          minConfidence: options.retailerScrapeOptions?.minConfidence ?? 35,
+          maxPages: bowlingComCategoryMaxPages,
+          maxProducts: bowlingComCategoryMaxProducts,
+        }
+      );
+
+      categoryResults.push(categoryScrape);
+    }
+
+    const totalSavedCount = categoryResults.reduce((total, result) => {
+      return total + result.savedCount;
+    }, 0);
+
+    const totalSkippedCount = categoryResults.reduce((total, result) => {
+      return (
+        total +
+        result.skippedNoMatchCount +
+        result.skippedNeedsReviewCount
+      );
+    }, 0);
+
+    const status = totalSkippedCount > 0 ? "partial_success" : "success";
+
+    successfulStepCount += 1;
+
+    steps.push({
+      name: "bowling_com_category_scrape",
+      status,
+      data: {
+        categoryCount: categoryResults.length,
+        totalSavedCount,
+        totalSkippedCount,
+        maxPages: bowlingComCategoryMaxPages,
+        maxProducts: bowlingComCategoryMaxProducts,
+        results: categoryResults,
+      },
+    });
+  } catch (error) {
+    failedStepCount += 1;
+
+    steps.push({
+      name: "bowling_com_category_scrape",
+      status: "failed",
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unknown Bowling.com category scrape error",
+    });
+  }
+} else {
+  skippedStepCount += 1;
+
+  steps.push({
+    name: "bowling_com_category_scrape",
+    status: "skipped",
+    reason:
+      runBowlingComCategoryScrapeStep === false
+        ? "Bowling.com category scrape disabled."
+        : "No Bowling.com category URLs configured.",
   });
 }
 
