@@ -494,6 +494,16 @@ retailerRoutes.get("/match-review/skipped", async (req, res) => {
     const sourceName = req.query.sourceName?.toString().trim();
     const rawStatus = req.query.status?.toString().trim();
 
+    const rawDedupeByListing = req.query.dedupeByListing
+      ?.toString()
+      .trim()
+      .toLowerCase();
+
+    const dedupeByListing =
+      rawDedupeByListing === "true" ||
+      rawDedupeByListing === "1" ||
+      rawDedupeByListing === "yes";
+
     const status =
       rawStatus === "skipped_no_match" ||
       rawStatus === "skipped_needs_review"
@@ -511,6 +521,7 @@ retailerRoutes.get("/match-review/skipped", async (req, res) => {
       limit: Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50,
       sourceName: sourceName || undefined,
       status,
+      dedupeByListing,
     });
 
     return res.json({

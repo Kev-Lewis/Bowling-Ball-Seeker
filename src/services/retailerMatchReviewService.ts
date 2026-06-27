@@ -4,6 +4,7 @@ export interface RecentSkippedMatchReviewOptions {
   limit?: number;
   sourceName?: string;
   status?: "skipped_no_match" | "skipped_needs_review";
+  dedupeByListing?: boolean;
 }
 
 function parseMetadata(metadataJson: string | null) {
@@ -43,11 +44,31 @@ function getReviewStatus(review: unknown) {
   return null;
 }
 
+function getReviewListingUrl(review: unknown) {
+  if (!review || typeof review !== "object" || !("listing" in review)) {
+    return null;
+  }
+
+  const listing = review.listing;
+
+  if (
+    !listing ||
+    typeof listing !== "object" ||
+    !("listingUrl" in listing) ||
+    typeof listing.listingUrl !== "string"
+  ) {
+    return null;
+  }
+
+  return listing.listingUrl.trim().toLowerCase();
+}
+
 export async function getRecentSkippedMatchReviews(
   options: RecentSkippedMatchReviewOptions = {}
 ) {
   const limit = options.limit ?? 50;
   const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 50;
+  const dedupeByListing = options.dedupeByListing ?? false;
 
   const runs = await prisma.scrapeRun.findMany({
     where: {
@@ -65,6 +86,7 @@ export async function getRecentSkippedMatchReviews(
   });
 
   const reviews = [];
+  const seenListingUrls = new Set<string>();
 
   for (const run of runs) {
     const metadata = parseMetadata(run.metadataJson);
@@ -75,6 +97,16 @@ export async function getRecentSkippedMatchReviews(
 
       if (options.status && reviewStatus !== options.status) {
         continue;
+      }
+
+      const listingUrl = getReviewListingUrl(review);
+
+      if (dedupeByListing && listingUrl) {
+        if (seenListingUrls.has(listingUrl)) {
+          continue;
+        }
+
+        seenListingUrls.add(listingUrl);
       }
 
       reviews.push({
@@ -104,6 +136,7 @@ export async function getRecentSkippedMatchReviews(
       limit: safeLimit,
       sourceName: options.sourceName ?? null,
       status: options.status ?? null,
+      dedupeByListing,
     },
     data,
     generatedAt: new Date().toISOString(),
