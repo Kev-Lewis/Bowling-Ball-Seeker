@@ -20,6 +20,7 @@ import {
 import { getRecentSkippedMatchReviews } from "../services/retailerMatchReviewService";
 import { resolveRetailerListingMatch } from "../services/manualRetailerMatchService";
 import { getRetailerMatchCandidates } from "../services/retailerMatchCandidateService";
+import { cleanupDuplicateRetailerListings } from "../services/retailerListingCleanupService";
 
 export const retailerRoutes = Router();
 
@@ -584,6 +585,44 @@ retailerRoutes.get("/match-review/candidates", async (req, res) => {
 
     return res.status(500).json({
       error: "Failed to load match candidates",
+      details: message,
+    });
+  }
+});
+
+retailerRoutes.get("/cleanup/duplicate-listings", async (req, res) => {
+  try {
+    const rawDryRun = req.query.dryRun?.toString().trim().toLowerCase();
+
+    const dryRun =
+      rawDryRun === undefined
+        ? true
+        : rawDryRun === "true" ||
+          rawDryRun === "1" ||
+          rawDryRun === "yes";
+
+    const retailerName = req.query.retailerName?.toString().trim();
+    const rawLimit = Number(req.query.limit ?? 50);
+
+    const result = await cleanupDuplicateRetailerListings({
+      dryRun,
+      retailerName: retailerName || undefined,
+      limit: Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50,
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown duplicate listing cleanup error";
+
+    return res.status(500).json({
+      error: "Failed to clean up duplicate retailer listings",
       details: message,
     });
   }
