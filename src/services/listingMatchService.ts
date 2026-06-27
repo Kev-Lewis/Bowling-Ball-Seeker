@@ -58,6 +58,38 @@ function tokenize(value: string) {
     "undrilled",
     "drilled",
     "single",
+    "limited",
+    "edition",
+
+    // Color words: keep exact phrase matching, but avoid weak partial matches
+    // like "Aspire Purple/Silver/Black" matching "Black Venom".
+    "black",
+    "white",
+    "red",
+    "blue",
+    "green",
+    "purple",
+    "silver",
+    "gold",
+    "gray",
+    "grey",
+    "orange",
+    "yellow",
+    "pink",
+    "navy",
+    "teal",
+    "aqua",
+    "lime",
+    "berry",
+    "scarlet",
+    "smoke",
+    "royal",
+    "sky",
+    "tangerine",
+    "lavender",
+    "ocean",
+    "carbon",
+    "cobalt",
   ]);
 
   return normalizeText(value)
@@ -137,24 +169,27 @@ export async function matchRetailerListingTitle(
       let score = 0;
       const reasons: string[] = [];
 
-      const matchableCanonicalName = cleanCatalogNameForMatching(ball.canonicalName);
+      const matchableCanonicalName = cleanCatalogNameForMatching(
+        ball.canonicalName
+      );
 
-if (hasPhrase(normalizedTitle, matchableCanonicalName)) {
-  score += 70;
-  reasons.push("Official ball name appears in listing title.");
-} else {
-  const nameCoverage = tokenCoverage(titleTokens, matchableCanonicalName);
+      if (hasPhrase(normalizedTitle, matchableCanonicalName)) {
+        score += 70;
+        reasons.push("Official ball name appears in listing title.");
+      } else {
+        const matchableNameTokens = tokenize(matchableCanonicalName);
+        const nameCoverage = tokenCoverage(titleTokens, matchableCanonicalName);
 
-  if (nameCoverage > 0) {
-    const points = Math.round(nameCoverage * 45);
-    score += points;
-    reasons.push(
-      `Official ball name token coverage: ${Math.round(
-        nameCoverage * 100
-      )}%.`
-    );
-  }
-}
+        if (matchableNameTokens.length >= 2 && nameCoverage > 0) {
+          const points = Math.round(nameCoverage * 45);
+          score += points;
+          reasons.push(
+            `Official ball name token coverage: ${Math.round(
+              nameCoverage * 100
+            )}%.`
+          );
+        }
+      }
 
       if (hasPhrase(normalizedTitle, ball.brand)) {
         score += 20;
