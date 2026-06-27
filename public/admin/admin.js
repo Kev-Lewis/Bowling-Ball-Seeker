@@ -2536,3 +2536,104 @@ loadListings();
     });
   }
 })();
+
+(function setupDeleteManufacturerSourceV1() {
+  if (window.__deleteManufacturerSourceV1) return;
+  window.__deleteManufacturerSourceV1 = true;
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function setManufacturerSummary(message) {
+    const summary = el("manufacturerSourcesSummary");
+    if (summary) summary.textContent = message;
+  }
+
+  window.deleteManufacturerSourceFromEncoded = async function (encodedSourceId) {
+    const sourceId = decodeURIComponent(encodedSourceId);
+
+    if (!confirm("Delete this disabled manufacturer source?")) {
+      return;
+    }
+
+    try {
+      if (typeof setStatus === "function") {
+        setStatus("Deleting manufacturer source", "loading");
+      }
+
+      const response = await fetch(
+        `/api/tracked-manufacturer-sources/delete?id=${encodeURIComponent(sourceId)}`
+      );
+
+      const json = await response.json();
+
+      if (!response.ok) {
+        throw new Error(json.details || json.error || "Delete failed");
+      }
+
+      setManufacturerSummary(
+        `Deleted manufacturer source: ${json.data?.deleted?.name ?? sourceId}.`
+      );
+
+      if (typeof window.loadManufacturerSources === "function") {
+        await window.loadManufacturerSources();
+      }
+
+      if (typeof setStatus === "function") {
+        setStatus("Manufacturer source deleted", "ready");
+      }
+    } catch (error) {
+      setManufacturerSummary(`Delete manufacturer source error: ${error.message}`);
+
+      if (typeof setStatus === "function") {
+        setStatus("Error", "error");
+      }
+    }
+  };
+
+  const originalRender = window.renderManufacturerSources;
+
+  window.renderManufacturerSources = function (data) {
+    originalRender(data);
+
+    const table = el("manufacturerSourcesTable");
+    if (!table) return;
+
+    table.querySelectorAll("tbody tr").forEach((row) => {
+      const statusText = row.textContent.toLowerCase();
+
+      if (!statusText.includes("disabled")) {
+        return;
+      }
+
+      if (row.querySelector(".delete-manufacturer-source-btn")) {
+        return;
+      }
+
+      const editButton = row.querySelector("button[onclick*='editManufacturerSourceFromEncoded']");
+      const actions = row.querySelector(".cell-actions");
+
+      if (!editButton || !actions) {
+        return;
+      }
+
+      const onclick = editButton.getAttribute("onclick") || "";
+      const match = onclick.match(/editManufacturerSourceFromEncoded\('([^']+)'\)/);
+
+      if (!match) {
+        return;
+      }
+
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "danger delete-manufacturer-source-btn";
+      deleteButton.textContent = "Delete";
+      deleteButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        window.deleteManufacturerSourceFromEncoded(match[1]);
+      });
+
+      actions.appendChild(deleteButton);
+    });
+  };
+})();

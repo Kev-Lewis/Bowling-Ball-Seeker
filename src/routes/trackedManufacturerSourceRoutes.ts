@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../db/prisma";
-import { runMotivManufacturerSync } from "../jobs/manufacturerSyncJob";
+import { runTrackedManufacturerSourceSync } from "../jobs/manufacturerSyncJob";
 import {
   getTrackedManufacturerSources,
   setTrackedManufacturerSourceEnabled,
@@ -134,15 +134,7 @@ trackedManufacturerSourceRoutes.get("/run", async (req, res) => {
       return;
     }
 
-    if (source.parserKey !== "motiv") {
-      res.status(400).json({
-        error: "Unsupported manufacturer parser.",
-        details: `No runner is wired for parserKey: ${source.parserKey}`,
-      });
-      return;
-    }
-
-    const result = await runMotivManufacturerSync({ sourceUrl: source.url });
+    const result = await runTrackedManufacturerSourceSync(source);
 
     res.json({
       data: {
@@ -181,22 +173,7 @@ trackedManufacturerSourceRoutes.get("/run-all", async (_req, res) => {
     const results = [];
 
     for (const source of sources) {
-      if (source.parserKey !== "motiv") {
-        results.push({
-          source,
-          result: {
-            sourceName: source.manufacturerName,
-            status: "failed",
-            error: `No runner is wired for parserKey: ${source.parserKey}`,
-          },
-        });
-
-        continue;
-      }
-
-      const result = await runMotivManufacturerSync({
-        sourceUrl: source.url,
-      });
+      const result = await runTrackedManufacturerSourceSync(source);
 
       results.push({
         source,
@@ -224,6 +201,46 @@ trackedManufacturerSourceRoutes.get("/run-all", async (_req, res) => {
   } catch (error) {
     res.status(500).json({
       error: "Failed to run enabled tracked manufacturer sources.",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+trackedManufacturerSourceRoutes.get("/delete", async (req, res) => {
+  try {
+    const id = getRequiredStringQuery(req.query.id, "id");
+
+    const source = await prisma.trackedManufacturerSource.findUnique({
+      where: { id },
+    });
+
+    if (!source) {
+      res.status(404).json({
+        error: "Tracked manufacturer source not found.",
+      });
+      return;
+    }
+
+    if (source.enabled) {
+      res.status(400).json({
+        error: "Disable the manufacturer source before deleting it.",
+      });
+      return;
+    }
+
+    const deleted = await prisma.trackedManufacturerSource.delete({
+      where: { id },
+    });
+
+    res.json({
+      data: {
+        deleted,
+        generatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to delete tracked manufacturer source.",
       details: error instanceof Error ? error.message : "Unknown error",
     });
   }
