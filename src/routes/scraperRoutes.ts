@@ -3,12 +3,14 @@ import {
   discoverMotivBallProducts,
   inspectMotivBallPage,
   parseMotivBallPage,
+  scrapeMotivManufacturerCatalog,
 } from "../scrapers/manufacturers/motivScraper";
 import {
   completeScrapeRun,
   failScrapeRun,
   startScrapeRun,
 } from "../services/scrapeRunService";
+import { syncManufacturerCatalog } from "../services/catalogSyncService";
 
 
 export const scraperRoutes = Router();
@@ -160,6 +162,92 @@ scraperRoutes.get("/manufacturers/motiv/parse", async (req, res) => {
 
     return res.status(500).json({
       error: "Failed to parse MOTIV ball page",
+      scrapeRunId: scrapeRun.id,
+      details: message,
+    });
+  }
+});
+
+scraperRoutes.post("/manufacturers/motiv/sync", async (_req, res) => {
+  const scrapeRun = await startScrapeRun({
+    sourceName: "Motiv",
+    sourceType: "manufacturer_catalog_live_sync",
+    metadata: {
+      mode: "live",
+      purpose: "discover_parse_and_sync_current_catalog",
+    },
+  });
+
+  try {
+    const catalogResult = await scrapeMotivManufacturerCatalog();
+
+    if (catalogResult.parseFailures.length > 0) {
+      await failScrapeRun(scrapeRun.id, "One or more MOTIV ball pages failed to parse.", {
+        mode: "live",
+        sourceUrl: catalogResult.sourceUrl,
+        discoveredCount: catalogResult.discoveredCount,
+        parsedCount: catalogResult.parsedCount,
+        failureCount: catalogResult.failureCount,
+        parseFailures: catalogResult.parseFailures,
+      });
+
+      return res.status(502).json({
+        error: "MOTIV catalog sync stopped because one or more pages failed to parse.",
+        scrapeRunId: scrapeRun.id,
+        data: {
+          discoveredCount: catalogResult.discoveredCount,
+          parsedCount: catalogResult.parsedCount,
+          failureCount: catalogResult.failureCount,
+          parseFailures: catalogResult.parseFailures,
+        },
+      });
+    }
+
+    const syncResult = await syncManufacturerCatalog(
+      "Motiv",
+      catalogResult.parsedBalls
+    );
+
+    await completeScrapeRun(scrapeRun.id, {
+      itemsFound: catalogResult.discoveredCount,
+      itemsCreated: syncResult.created.length,
+      itemsUpdated: syncResult.updated.length + syncResult.relisted.length,
+      itemsRemoved: syncResult.removed.length,
+      metadata: {
+        mode: "live",
+        sourceUrl: catalogResult.sourceUrl,
+        discoveredCount: catalogResult.discoveredCount,
+        parsedCount: catalogResult.parsedCount,
+        syncResult,
+      },
+    });
+
+    return res.json({
+      scrapeRunId: scrapeRun.id,
+      data: {
+        catalog: {
+          sourceName: catalogResult.sourceName,
+          sourceUrl: catalogResult.sourceUrl,
+          discoveredCount: catalogResult.discoveredCount,
+          parsedCount: catalogResult.parsedCount,
+          failureCount: catalogResult.failureCount,
+        },
+        sync: syncResult,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error ? error.message : "Unknown live MOTIV sync error";
+
+    await failScrapeRun(scrapeRun.id, message, {
+      mode: "live",
+      purpose: "discover_parse_and_sync_current_catalog",
+    });
+
+    return res.status(500).json({
+      error: "Failed to run live MOTIV catalog sync",
       scrapeRunId: scrapeRun.id,
       details: message,
     });

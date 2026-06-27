@@ -371,3 +371,41 @@ export async function parseMotivBallPage(
     imageUrl: null,
   };
 }
+
+export async function scrapeMotivManufacturerCatalog() {
+  const discoveryResult = await discoverMotivBallProducts();
+
+  const parsedBalls: ManufacturerBallInput[] = [];
+  const parseFailures: {
+    name: string;
+    url: string;
+    error: string;
+  }[] = [];
+
+  for (const product of discoveryResult.data) {
+    try {
+      const parsedBall = await parseMotivBallPage(product.url);
+      parsedBalls.push(parsedBall);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unknown parse error";
+
+      parseFailures.push({
+        name: product.name,
+        url: product.url,
+        error: message,
+      });
+    }
+  }
+
+  return {
+    sourceName: "Motiv",
+    sourceUrl: discoveryResult.sourceUrl,
+    checkedAt: new Date().toISOString(),
+    discoveredCount: discoveryResult.count,
+    parsedCount: parsedBalls.length,
+    failureCount: parseFailures.length,
+    parsedBalls,
+    parseFailures,
+  };
+}
