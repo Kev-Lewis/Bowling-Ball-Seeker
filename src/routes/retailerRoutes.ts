@@ -19,6 +19,7 @@ import {
 } from "../scrapers/retailers/bowlingComScraper";
 import { getRecentSkippedMatchReviews } from "../services/retailerMatchReviewService";
 import { resolveRetailerListingMatch } from "../services/manualRetailerMatchService";
+import { getRetailerMatchCandidates } from "../services/retailerMatchCandidateService";
 
 export const retailerRoutes = Router();
 
@@ -500,6 +501,74 @@ const dryRun =
 
     return res.status(500).json({
       error: "Failed to resolve retailer listing match",
+      details: message,
+    });
+  }
+});
+
+retailerRoutes.get("/match-review/candidates", async (req, res) => {
+  try {
+    const listingUrl = req.query.listingUrl?.toString().trim();
+    const listingTitle = req.query.listingTitle?.toString().trim();
+
+    const rawLimit = Number(req.query.limit ?? 10);
+    const rawMinConfidence = Number(req.query.minConfidence ?? 0);
+
+    const rawIncludeRejected = req.query.includeRejected
+      ?.toString()
+      .trim()
+      .toLowerCase();
+
+    const rawCurrentOnly = req.query.currentOnly
+      ?.toString()
+      .trim()
+      .toLowerCase();
+
+    const includeRejected =
+      rawIncludeRejected === undefined
+        ? true
+        : rawIncludeRejected === "true" ||
+          rawIncludeRejected === "1" ||
+          rawIncludeRejected === "yes";
+
+    const currentOnly =
+      rawCurrentOnly === undefined
+        ? true
+        : rawCurrentOnly === "true" ||
+          rawCurrentOnly === "1" ||
+          rawCurrentOnly === "yes";
+
+    if (!listingUrl && !listingTitle) {
+      return res.status(400).json({
+        error: "Either listingUrl or listingTitle is required.",
+      });
+    }
+
+    const result = await getRetailerMatchCandidates({
+      listingUrl: listingUrl || undefined,
+      listingTitle: listingTitle || undefined,
+      limit: Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 10,
+      minConfidence:
+        Number.isFinite(rawMinConfidence) && rawMinConfidence >= 0
+          ? rawMinConfidence
+          : 0,
+      includeRejected,
+      currentOnly,
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown match candidate lookup error";
+
+    return res.status(500).json({
+      error: "Failed to load match candidates",
       details: message,
     });
   }
