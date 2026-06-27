@@ -25,6 +25,7 @@ import {
   getRetailerListingAdminDetail,
   getRetailerListingAdminList,
 } from "../services/retailerListingAdminService";
+import { getAdminDashboardSummary } from "../services/adminDashboardSummaryService";
 
 export const retailerRoutes = Router();
 
@@ -149,6 +150,18 @@ function getMatchStatusQuery(value: unknown) {
     | "manually_matched"
     | "rejected";
 }
+
+retailerRoutes.get("/dashboard-summary", async (_req, res) => {
+  try {
+    const data = await getAdminDashboardSummary();
+    res.json({ data });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to load admin dashboard summary.",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
 
 retailerRoutes.get("/inspect-page", async (req, res) => {
   try {

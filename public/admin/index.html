@@ -328,6 +328,17 @@
         font-weight: 700;
       }
 
+      .summary-card-helper {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.25;
+}
+
+.summary-card-value.is-small {
+  font-size: 1rem;
+}
+
       .dashboard-stack {
         display: grid;
         gap: 16px;
@@ -906,23 +917,38 @@
       </div>
 
       <div class="summary-grid" aria-label="Admin dashboard summary">
-        <div class="summary-card">
-          <div class="summary-card-label">Listings</div>
-          <div class="summary-card-value">Retailer Data</div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-card-label">Mode</div>
-          <div class="summary-card-value">Local Admin</div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-card-label">Match Safety</div>
-          <div class="summary-card-value">Protected</div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-card-label">Review Flow</div>
-          <div class="summary-card-value">Manual Assign</div>
-        </div>
-      </div>
+  <div class="summary-card">
+    <div class="summary-card-label">Retailer Listings</div>
+    <div id="summaryTotalListings" class="summary-card-value">—</div>
+    <div id="summaryTotalListingsHelp" class="summary-card-helper">
+      Saved price listings
+    </div>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-card-label">Manual Matches</div>
+    <div id="summaryManualMatches" class="summary-card-value">—</div>
+    <div id="summaryManualMatchesHelp" class="summary-card-helper">
+      Protected assignments
+    </div>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-card-label">No-Match Reviews</div>
+    <div id="summarySkippedNoMatch" class="summary-card-value">—</div>
+    <div id="summarySkippedNoMatchHelp" class="summary-card-helper">
+      Unique skipped listings
+    </div>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-card-label">Last Retailer Scrape</div>
+    <div id="summaryLastScrape" class="summary-card-value">—</div>
+    <div id="summaryLastScrapeHelp" class="summary-card-helper">
+      No run loaded
+    </div>
+  </div>
+</div>
 
       <div class="dashboard-stack">
         <div class="top-tools-grid">

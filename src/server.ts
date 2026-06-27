@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "path";
 import { ballRoutes } from "./routes/ballRoutes";
 import { priceRoutes } from "./routes/priceRoutes";
 import { statsRoutes } from "./routes/statsRoutes";
@@ -22,6 +23,8 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+app.use("/admin", express.static(path.join(process.cwd(), "public", "admin")));
 
 const PORT = process.env.PORT || 3000;
 

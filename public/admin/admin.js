@@ -5,6 +5,7 @@ let activeListingDetailId = null;
 let navHighlightTimeout = null;
 let lastScrapeOutput = null;
 let lastCandidatePreviewOutput = null;
+let dashboardSummaryRefreshTimeout = null;
 
 function setStatus(message, state = "ready") {
   if (globalStatusText) {
@@ -17,6 +18,93 @@ function setStatus(message, state = "ready") {
     globalStatus.classList.remove("is-ready", "is-loading", "is-error");
     globalStatus.classList.add(`is-${state}`);
   }
+}
+
+function setText(id, value) {
+  const element = document.getElementById(id);
+
+  if (!element) {
+    return;
+  }
+
+  element.textContent = value;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "No completed run";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown time";
+  }
+
+  return date.toLocaleString();
+}
+
+async function loadDashboardSummary() {
+  try {
+    const data = await apiGet("/api/retailers/dashboard-summary");
+    renderDashboardSummary(data);
+  } catch (error) {
+    setText("summaryTotalListings", "—");
+    setText("summaryTotalListingsHelp", "Unable to load listings");
+    setText("summaryManualMatches", "—");
+    setText("summaryManualMatchesHelp", "Unable to load manual matches");
+    setText("summarySkippedNoMatch", "—");
+    setText("summarySkippedNoMatchHelp", "Unable to load match review");
+    setText("summaryLastScrape", "Error");
+    setText("summaryLastScrapeHelp", error.message);
+    setStatus("Error", "error");
+  }
+}
+
+function renderDashboardSummary(data) {
+  const listings = data.listings ?? {};
+  const matchReview = data.matchReview ?? {};
+  const latestRun = data.latestRetailerScrapeRun;
+
+  setText("summaryTotalListings", listings.total ?? 0);
+  setText(
+    "summaryTotalListingsHelp",
+    `${listings.autoMatched ?? 0} auto • ${listings.likelyMatched ?? 0} likely`
+  );
+
+  setText("summaryManualMatches", listings.manuallyMatched ?? 0);
+  setText(
+    "summaryManualMatchesHelp",
+    `${listings.manualReview ?? 0} manual review • ${listings.rejected ?? 0} rejected`
+  );
+
+  setText("summarySkippedNoMatch", matchReview.uniqueSkippedNoMatchCount ?? 0);
+  setText(
+    "summarySkippedNoMatchHelp",
+    `${matchReview.uniqueSkippedNeedsReviewCount ?? 0} need review`
+  );
+
+  if (!latestRun) {
+    setText("summaryLastScrape", "None");
+    setText("summaryLastScrapeHelp", "No retailer scrape run found");
+    return;
+  }
+
+  setText("summaryLastScrape", latestRun.status ?? "unknown");
+  setText(
+    "summaryLastScrapeHelp",
+    `${latestRun.sourceName ?? "retailer"} • ${formatDateTime(
+      latestRun.finishedAt ?? latestRun.startedAt
+    )}`
+  );
+}
+
+function scheduleDashboardSummaryRefresh() {
+  window.clearTimeout(dashboardSummaryRefreshTimeout);
+
+  dashboardSummaryRefreshTimeout = window.setTimeout(() => {
+    loadDashboardSummary();
+  }, 250);
 }
 
 function setupInfoButtons() {
@@ -282,9 +370,10 @@ async function runCategoryScrape() {
     const data = await apiGet(`/api/jobs/bowling-com-category-scrape/run?${query}`);
 
     lastScrapeOutput = data;
-    renderJson("scrapeOutput", data);
-    updateScrapeSummary(data);
-    openScrapeOutputModal();
+renderJson("scrapeOutput", data);
+updateScrapeSummary(data);
+openScrapeOutputModal();
+scheduleDashboardSummaryRefresh();
   } catch (error) {
     const errorOutput = { error: error.message };
 
@@ -512,7 +601,8 @@ async function manualAssign(dryRun) {
 
     const data = await apiGet(`/api/retailers/match-review/resolve?${query}`);
     renderJson("manualAssignOutput", data);
-    setStatus(dryRun ? "Dry run complete" : "Manual assignment complete", "ready");
+scheduleDashboardSummaryRefresh();
+setStatus(dryRun ? "Dry run complete" : "Manual assignment complete", "ready");
   } catch (error) {
     renderJson("manualAssignOutput", { error: error.message });
     setStatus("Error", "error");
@@ -699,5 +789,6 @@ document.getElementById("loadManualListingsBtn").addEventListener("click", () =>
   loadListings({ matchStatus: "manually_matched" });
 });
 
+loadDashboardSummary();
 loadSkippedReviews();
 loadListings();
