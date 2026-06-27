@@ -7,6 +7,8 @@ let lastScrapeOutput = null;
 let lastCandidatePreviewOutput = null;
 let dashboardSummaryRefreshTimeout = null;
 let lastTrackedSources = [];
+let catalogBallListingContext = null;
+let isCreatingCatalogBall = false;
 
 function setStatus(message, state = "ready") {
   if (globalStatusText) {
@@ -216,6 +218,280 @@ function updateCandidatePreviewSummary(data) {
 
   summary.textContent = `Last preview: ${candidateCount} candidates found for ${listingTitle}.${warning}`;
   viewButton.removeAttribute("hidden");
+}
+
+function setupCatalogBallModal() {
+  const modal = document.getElementById("catalogBallModal");
+  const closeButton = document.getElementById("closeCatalogBallModalBtn");
+
+  if (!modal || !closeButton) {
+    return;
+  }
+
+  closeButton.addEventListener("click", closeCatalogBallModal);
+
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) {
+      closeCatalogBallModal();
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !modal.hasAttribute("hidden")) {
+      closeCatalogBallModal();
+    }
+  });
+}
+
+function openCatalogBallModal() {
+  const modal = document.getElementById("catalogBallModal");
+
+  if (!modal) {
+    return;
+  }
+
+  modal.removeAttribute("hidden");
+}
+
+function closeCatalogBallModal() {
+  const modal = document.getElementById("catalogBallModal");
+
+  if (!modal) {
+    return;
+  }
+
+  modal.setAttribute("hidden", "");
+}
+
+function slugify(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function deriveBrandAndName(listingTitle) {
+  const cleaned = String(listingTitle ?? "").trim();
+  const parts = cleaned.split(/\s+/);
+  const brand = parts[0] || "";
+  const canonicalName = parts.length > 1 ? parts.slice(1).join(" ") : cleaned;
+
+  return {
+    brand,
+    canonicalName,
+  };
+}
+
+function setCatalogBallValue(id, value) {
+  const element = document.getElementById(id);
+
+  if (!element) {
+    return;
+  }
+
+  element.value = value ?? "";
+}
+
+function openCreateCatalogBallFromPreview() {
+  if (!lastCandidatePreviewOutput) {
+    setStatus("Error", "error");
+    return;
+  }
+
+  const listingTitle = lastCandidatePreviewOutput.listingTitle ?? "";
+  const listingUrl =
+    lastCandidatePreviewOutput.listingUrl || getInputValue("candidateListingUrl");
+
+  const derived = deriveBrandAndName(listingTitle);
+  const ballId = `${slugify(derived.brand)}-${slugify(derived.canonicalName)}`;
+
+  catalogBallListingContext = {
+    listingTitle,
+    listingUrl,
+  };
+
+  setCatalogBallValue("catalogBallId", ballId);
+  setCatalogBallValue("catalogBallBrand", derived.brand);
+  setCatalogBallValue("catalogBallManufacturer", derived.brand);
+  setCatalogBallValue("catalogBallCanonicalName", derived.canonicalName);
+  setCatalogBallValue("catalogBallCoverstockType", "unknown");
+  setCatalogBallValue("catalogBallCoreType", "unknown");
+  setCatalogBallValue("catalogBallCoverstockName", "");
+  setCatalogBallValue("catalogBallCoreName", "");
+  setCatalogBallValue("catalogBallFactoryFinish", "");
+  setCatalogBallValue("catalogBallRg", "");
+  setCatalogBallValue("catalogBallDifferential", "");
+  setCatalogBallValue("catalogBallMbDifferential", "");
+  setCatalogBallValue("catalogBallWeights", "12,13,14,15,16");
+  setCatalogBallValue("catalogBallIsCurrent", "true");
+  setCatalogBallValue("catalogBallOfficialUrl", listingUrl);
+  setCatalogBallValue("catalogBallImageUrl", "");
+
+  const context = document.getElementById("catalogBallContext");
+  if (context) {
+    context.textContent = `Creating catalog ball for listing: ${listingTitle}`;
+  }
+
+  const output = document.getElementById("catalogBallOutput");
+  if (output) {
+    output.textContent = "Review or fill in missing specs, then create the catalog ball.";
+  }
+
+  openCatalogBallModal();
+}
+
+function getCatalogBallPayload() {
+  const canonicalName = getInputValue("catalogBallCanonicalName");
+  const brand = getInputValue("catalogBallBrand");
+  const manufacturer = getInputValue("catalogBallManufacturer") || brand;
+
+  if (!canonicalName || !brand) {
+    throw new Error("Brand and canonical name are required.");
+  }
+
+  return {
+    id: getInputValue("catalogBallId") || `${slugify(brand)}-${slugify(canonicalName)}`,
+    canonicalName,
+    brand,
+    manufacturer,
+    coverstockName: getInputValue("catalogBallCoverstockName"),
+    coverstockType: getInputValue("catalogBallCoverstockType") || "unknown",
+    coreName: getInputValue("catalogBallCoreName"),
+    coreType: getInputValue("catalogBallCoreType") || "unknown",
+    factoryFinish: getInputValue("catalogBallFactoryFinish"),
+    rg: getInputValue("catalogBallRg"),
+    differential: getInputValue("catalogBallDifferential"),
+    mbDifferential: getInputValue("catalogBallMbDifferential"),
+    availableWeights: getInputValue("catalogBallWeights"),
+    officialUrl: getInputValue("catalogBallOfficialUrl"),
+    imageUrl: getInputValue("catalogBallImageUrl"),
+    isCurrent: getInputValue("catalogBallIsCurrent"),
+  };
+}
+
+async function createCatalogBall(assignAfterCreate = false) {
+  if (isCreatingCatalogBall) {
+    return;
+  }
+
+  const createButton = document.getElementById("createCatalogBallBtn");
+  const createAndAssignButton = document.getElementById("createAndAssignCatalogBallBtn");
+
+  try {
+    isCreatingCatalogBall = true;
+
+    if (createButton) {
+      createButton.disabled = true;
+      createButton.textContent = "Creating...";
+    }
+
+    if (createAndAssignButton) {
+      createAndAssignButton.disabled = true;
+      createAndAssignButton.textContent = assignAfterCreate
+        ? "Creating & Assigning..."
+        : "Creating...";
+    }
+
+    const payload = getCatalogBallPayload();
+
+    if (assignAfterCreate) {
+      const listingUrl =
+        catalogBallListingContext?.listingUrl || getInputValue("candidateListingUrl");
+
+      if (!listingUrl) {
+        throw new Error("Listing URL is required for create and assign.");
+      }
+
+      const confirmed = window.confirm(
+        `Create catalog ball "${payload.brand} ${payload.canonicalName}" and assign listing?\n\n${listingUrl}`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const query = encodeQuery(payload);
+    const createdBall = await apiGet(`/api/admin/catalog-balls/upsert?${query}`);
+
+    let assignment = null;
+
+    if (assignAfterCreate) {
+      const listingUrl =
+        catalogBallListingContext?.listingUrl || getInputValue("candidateListingUrl");
+
+      assignment = await assignListingToBall(listingUrl, createdBall.data.id, false);
+      document.getElementById("manualBallId").value = createdBall.data.id;
+    }
+
+    const output = document.getElementById("catalogBallOutput");
+    if (output) {
+      output.textContent = `${createdBall.action === "created" ? "Created" : "Updated"} catalog ball: ${
+        createdBall.data.id
+      }${assignment ? " and assigned listing." : "."}`;
+    }
+
+    renderJson("manualAssignOutput", {
+      catalogBall: createdBall,
+      assignment,
+    });
+
+    scheduleDashboardSummaryRefresh();
+    await loadSkippedReviews();
+    await loadListings();
+
+    if (assignAfterCreate) {
+      closeCatalogBallModal();
+      closeCandidatePreviewModal();
+      closeScrapeOutputModal();
+
+      catalogBallListingContext = null;
+      lastCandidatePreviewOutput = null;
+
+      const summary = document.getElementById("candidatePreviewSummary");
+      if (summary) {
+        summary.textContent = `Created and assigned listing to ${createdBall.data.id}.`;
+      }
+
+      const viewButton = document.getElementById("viewCandidatePreviewBtn");
+      if (viewButton) {
+        viewButton.setAttribute("hidden", "");
+      }
+    }
+
+    setStatus(assignAfterCreate ? "Catalog ball assigned" : "Catalog ball saved", "ready");
+  } catch (error) {
+    const output = document.getElementById("catalogBallOutput");
+    if (output) {
+      output.textContent = `Catalog ball error: ${error.message}`;
+    }
+
+    setStatus("Error", "error");
+  } finally {
+    isCreatingCatalogBall = false;
+
+    if (createButton) {
+      createButton.disabled = false;
+      createButton.textContent = "Create Catalog Ball";
+    }
+
+    if (createAndAssignButton) {
+      createAndAssignButton.disabled = false;
+      createAndAssignButton.textContent = "Create & Assign Listing";
+    }
+  }
+}
+
+async function assignListingToBall(listingUrl, ballId, dryRun) {
+  const query = encodeQuery({
+    listingUrl,
+    ballId,
+    dryRun: String(dryRun),
+    note: dryRun ? "admin catalog ball dry run" : "admin catalog ball create and assign",
+  });
+
+  return apiGet(`/api/retailers/match-review/resolve?${query}`);
 }
 
 function escapeHtml(value) {
@@ -884,6 +1160,11 @@ function renderCandidatePreview(data) {
       <div><strong>Listing:</strong> ${escapeHtml(data.listingTitle)}</div>
       <div class="muted">${escapeHtml(data.listingUrl || "")}</div>
       <div class="muted">${escapeHtml(data.warning || "No warning.")}</div>
+      <div class="row" style="margin-top: 10px">
+        <button class="secondary" onclick="openCreateCatalogBallFromPreview()">
+          Create Catalog Ball
+        </button>
+      </div>
     </div>
     ${candidates || "<p>No candidates found.</p>"}
   `;
@@ -925,16 +1206,16 @@ async function manualAssign(dryRun) {
       }
     }
 
-    const query = encodeQuery({
-      listingUrl,
-      ballId,
-      dryRun: String(dryRun),
-      note: dryRun ? "admin console dry run" : "admin console manual assign",
-    });
-
-    const data = await apiGet(`/api/retailers/match-review/resolve?${query}`);
+    const data = await assignListingToBall(listingUrl, ballId, dryRun);
     renderJson("manualAssignOutput", data);
     scheduleDashboardSummaryRefresh();
+
+    if (!dryRun) {
+      await loadSkippedReviews();
+      await loadListings();
+      closeCandidatePreviewModal();
+    }
+
     setStatus(dryRun ? "Dry run complete" : "Manual assignment complete", "ready");
   } catch (error) {
     renderJson("manualAssignOutput", { error: error.message });
@@ -1092,6 +1373,7 @@ setupInfoButtons();
 setupNavJumps();
 setupScrapeOutputModal();
 setupCandidatePreviewModal();
+setupCatalogBallModal();
 
 document
   .getElementById("runCategoryScrapeBtn")
@@ -1128,6 +1410,14 @@ document
 document
   .getElementById("manualAssignBtn")
   .addEventListener("click", () => manualAssign(false));
+
+document
+  .getElementById("createCatalogBallBtn")
+  .addEventListener("click", () => createCatalogBall(false));
+
+document
+  .getElementById("createAndAssignCatalogBallBtn")
+  .addEventListener("click", () => createCatalogBall(true));
 
 document
   .getElementById("loadListingsBtn")

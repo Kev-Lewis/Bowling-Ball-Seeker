@@ -1318,6 +1318,113 @@
       </div>
     </div>
 
+    <div id="catalogBallModal" class="modal-backdrop" hidden>
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="catalogBallModalTitle">
+        <div class="modal-head">
+          <h2 id="catalogBallModalTitle">Create Catalog Ball</h2>
+          <button id="closeCatalogBallModalBtn" class="secondary">Close</button>
+        </div>
+        <div class="modal-body">
+          <div id="catalogBallContext" class="output-summary">
+            Create a canonical catalog ball, then optionally assign the current listing to it.
+          </div>
+
+          <div class="grid grid-3" style="margin-top: 16px">
+            <div>
+              <label for="catalogBallId">Ball ID</label>
+              <input id="catalogBallId" placeholder="storm-concept" />
+            </div>
+            <div>
+              <label for="catalogBallBrand">Brand</label>
+              <input id="catalogBallBrand" placeholder="Storm" />
+            </div>
+            <div>
+              <label for="catalogBallManufacturer">Manufacturer</label>
+              <input id="catalogBallManufacturer" placeholder="Storm" />
+            </div>
+            <div>
+              <label for="catalogBallCanonicalName">Canonical Name</label>
+              <input id="catalogBallCanonicalName" placeholder="Concept" />
+            </div>
+            <div>
+              <label for="catalogBallCoverstockType">Coverstock Type</label>
+              <select id="catalogBallCoverstockType">
+                <option value="unknown" selected>unknown</option>
+                <option value="solid">solid</option>
+                <option value="pearl">pearl</option>
+                <option value="hybrid">hybrid</option>
+                <option value="urethane">urethane</option>
+                <option value="plastic">plastic</option>
+              </select>
+            </div>
+            <div>
+              <label for="catalogBallCoreType">Core Type</label>
+              <select id="catalogBallCoreType">
+                <option value="unknown" selected>unknown</option>
+                <option value="symmetric">symmetric</option>
+                <option value="asymmetric">asymmetric</option>
+                <option value="pancake">pancake</option>
+              </select>
+            </div>
+            <div>
+              <label for="catalogBallCoverstockName">Coverstock Name</label>
+              <input id="catalogBallCoverstockName" placeholder="optional" />
+            </div>
+            <div>
+              <label for="catalogBallCoreName">Core Name</label>
+              <input id="catalogBallCoreName" placeholder="optional" />
+            </div>
+            <div>
+              <label for="catalogBallFactoryFinish">Factory Finish</label>
+              <input id="catalogBallFactoryFinish" placeholder="optional" />
+            </div>
+            <div>
+              <label for="catalogBallRg">RG</label>
+              <input id="catalogBallRg" type="number" step="0.001" placeholder="optional" />
+            </div>
+            <div>
+              <label for="catalogBallDifferential">Differential</label>
+              <input id="catalogBallDifferential" type="number" step="0.001" placeholder="optional" />
+            </div>
+            <div>
+              <label for="catalogBallMbDifferential">MB Differential</label>
+              <input id="catalogBallMbDifferential" type="number" step="0.001" placeholder="optional" />
+            </div>
+            <div>
+              <label for="catalogBallWeights">Available Weights</label>
+              <input id="catalogBallWeights" placeholder="12,13,14,15,16" />
+            </div>
+            <div>
+              <label for="catalogBallIsCurrent">Is Current</label>
+              <select id="catalogBallIsCurrent">
+                <option value="true" selected>true</option>
+                <option value="false">false</option>
+              </select>
+            </div>
+            <div>
+              <label for="catalogBallOfficialUrl">Official URL</label>
+              <input id="catalogBallOfficialUrl" placeholder="optional" />
+            </div>
+            <div>
+              <label for="catalogBallImageUrl">Image URL</label>
+              <input id="catalogBallImageUrl" placeholder="optional" />
+            </div>
+          </div>
+
+          <div class="row" style="margin-top: 16px">
+            <button id="createCatalogBallBtn">Create Catalog Ball</button>
+            <button id="createAndAssignCatalogBallBtn" class="danger">
+              Create & Assign Listing
+            </button>
+          </div>
+
+          <div id="catalogBallOutput" class="output-summary">
+            Catalog ball output will appear here.
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="./admin.js"></script>
   </body>
 </html>

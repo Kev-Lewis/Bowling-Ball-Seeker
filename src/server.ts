@@ -17,6 +17,7 @@ import { priceChangeRoutes } from "./routes/priceChangeRoutes";
 import { alertRoutes } from "./routes/alertRoutes";
 import { dealRoutes } from "./routes/dealRoutes";
 import { trackedRetailerSourceRoutes } from "./routes/trackedRetailerSourceRoutes";
+import { catalogBallAdminRoutes } from "./routes/catalogBallAdminRoutes";
 
 dotenv.config();
 
@@ -51,6 +52,7 @@ app.use("/api/price-changes", priceChangeRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/deals", dealRoutes);
 app.use("/api/tracked-retailer-sources", trackedRetailerSourceRoutes);
+app.use("/api/admin/catalog-balls", catalogBallAdminRoutes);
 
 app.listen(PORT, () => {
   console.log(`Bowling Ball Seeker API running on http://localhost:${PORT}`);

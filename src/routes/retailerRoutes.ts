@@ -17,13 +17,13 @@ import {
   scrapeBowlingComCategoryPages,
   scrapeBowlingComProductPage,
 } from "../scrapers/retailers/bowlingComScraper";
-import { getRecentSkippedMatchReviews } from "../services/retailerMatchReviewService";
 import { resolveRetailerListingMatch } from "../services/manualRetailerMatchService";
 import { getRetailerMatchCandidates } from "../services/retailerMatchCandidateService";
 import { cleanupDuplicateRetailerListings } from "../services/retailerListingCleanupService";
 import {
   getRetailerListingAdminDetail,
   getRetailerListingAdminList,
+  getRetailerListingSkippedReviews,
 } from "../services/retailerListingAdminService";
 import { getAdminDashboardSummary } from "../services/adminDashboardSummaryService";
 
@@ -35,9 +35,12 @@ const matchStatuses: MatchStatus[] = [
   "auto_matched",
   "likely_match",
   "manual_review",
+  "manually_matched",
   "rejected",
 ];
 const stockStatuses: StockStatus[] = ["in_stock", "out_of_stock", "unknown"];
+
+type SkippedMatchReviewStatus = "skipped_no_match" | "skipped_needs_review";
 
 function getRequiredString(value: unknown, fieldName: string) {
   const parsed = value?.toString().trim();
@@ -143,12 +146,39 @@ function getMatchStatusQuery(value: unknown) {
     return null;
   }
 
-  return parsed as
-    | "auto_matched"
-    | "likely_match"
-    | "manual_review"
-    | "manually_matched"
-    | "rejected";
+  return parsed as MatchStatus;
+}
+
+function getSkippedReviewStatusQuery(value: unknown) {
+  const parsed = value?.toString().trim();
+
+  if (!parsed) {
+    return undefined;
+  }
+
+  if (parsed === "skipped_no_match" || parsed === "skipped_needs_review") {
+    return parsed as SkippedMatchReviewStatus;
+  }
+
+  return null;
+}
+
+function getDedupeByListingQuery(value: unknown) {
+  const parsed = value?.toString().trim().toLowerCase();
+
+  if (parsed === undefined || parsed === "") {
+    return true;
+  }
+
+  if (parsed === "true" || parsed === "1" || parsed === "yes") {
+    return true;
+  }
+
+  if (parsed === "false" || parsed === "0" || parsed === "no") {
+    return false;
+  }
+
+  return true;
 }
 
 retailerRoutes.get("/dashboard-summary", async (_req, res) => {
@@ -504,35 +534,18 @@ retailerRoutes.get("/balls/:ballId/price-summary", async (req, res) => {
 retailerRoutes.get("/match-review/skipped", async (req, res) => {
   try {
     const rawLimit = Number(req.query.limit ?? 50);
-    const sourceName = req.query.sourceName?.toString().trim();
     const rawStatus = req.query.status?.toString().trim();
+    const status = getSkippedReviewStatusQuery(rawStatus);
+    const dedupeByListing = getDedupeByListingQuery(req.query.dedupeByListing);
 
-    const rawDedupeByListing = req.query.dedupeByListing
-      ?.toString()
-      .trim()
-      .toLowerCase();
-
-    const dedupeByListing =
-      rawDedupeByListing === "true" ||
-      rawDedupeByListing === "1" ||
-      rawDedupeByListing === "yes";
-
-    const status =
-      rawStatus === "skipped_no_match" ||
-      rawStatus === "skipped_needs_review"
-        ? rawStatus
-        : undefined;
-
-    if (rawStatus && !status) {
+    if (status === null) {
       return res.status(400).json({
-        error:
-          "Invalid status. Use skipped_no_match or skipped_needs_review.",
+        error: "Invalid status. Use skipped_no_match or skipped_needs_review.",
       });
     }
 
-    const result = await getRecentSkippedMatchReviews({
+    const result = await getRetailerListingSkippedReviews({
       limit: Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 50,
-      sourceName: sourceName || undefined,
       status,
       dedupeByListing,
     });
@@ -563,8 +576,8 @@ retailerRoutes.get("/match-review/resolve", async (req, res) => {
     const note = req.query.note?.toString().trim();
     const rawDryRun = req.query.dryRun?.toString().trim().toLowerCase();
 
-const dryRun =
-  rawDryRun === "true" || rawDryRun === "1" || rawDryRun === "yes";
+    const dryRun =
+      rawDryRun === "true" || rawDryRun === "1" || rawDryRun === "yes";
 
     if (!ballId) {
       return res.status(400).json({
