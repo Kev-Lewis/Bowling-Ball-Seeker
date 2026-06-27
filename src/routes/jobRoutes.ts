@@ -3,6 +3,7 @@ import { runDailyManufacturerSync } from "../jobs/manufacturerSyncJob";
 import { getLocalSchedulerStatus } from "../scheduler/localScheduler";
 import { runPriceAlertJob } from "../jobs/priceAlertJob";
 import { runDailySystemJob } from "../jobs/dailyJob";
+import { runMockRetailerScrapeJob } from "../jobs/retailerScrapeJob";
 
 export const jobRoutes = Router();
 
@@ -166,6 +167,32 @@ jobRoutes.get("/daily/run", async (req, res) => {
 
     return res.status(500).json({
       error: "Failed to run daily system job",
+      details: message,
+    });
+  }
+});
+
+jobRoutes.get("/mock-retailer-scrape/run", async (req, res) => {
+  try {
+    const allowLikelyMatch = getBooleanQuery(req.query.allowLikelyMatch, false);
+    const minConfidence = getNumberQuery(req.query.minConfidence, 35);
+
+    const result = await runMockRetailerScrapeJob({
+      allowLikelyMatch,
+      minConfidence,
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error ? error.message : "Unknown mock retailer scrape error";
+
+    return res.status(500).json({
+      error: "Failed to run mock retailer scrape job",
       details: message,
     });
   }
