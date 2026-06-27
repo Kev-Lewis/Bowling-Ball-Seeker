@@ -1,6 +1,7 @@
 import { prisma } from "../db/prisma";
 import { scrapeMotivManufacturerCatalog } from "../scrapers/manufacturers/motivScraper";
 import { scrapeStormProductsManufacturerCatalog } from "../scrapers/manufacturers/stormProductsScraper";
+import { scrapeBrunswickManufacturerCatalog } from "../scrapers/manufacturers/brunswickScraper";
 import {
   completeScrapeRun,
   failScrapeRun,
@@ -219,6 +220,110 @@ export async function runStormProductsManufacturerSync(options: {
   }
 }
 
+export async function runBrunswickManufacturerSync(options: {
+  sourceUrl: string;
+  brandName: string;
+  maxPages?: number | null;
+  scrapeDelayMs?: number | null;
+}): Promise<ManufacturerSyncJobResult> {
+  const sourceName = options.brandName;
+
+  const scrapeRun = await startScrapeRun({
+    sourceName,
+    sourceType: "manufacturer_catalog_live_sync",
+    metadata: {
+      mode: "job",
+      purpose: "discover_parse_and_sync_current_catalog",
+      sourceUrl: options.sourceUrl,
+      parser: "storm-products",
+      maxPages: options.maxPages ?? null,
+    },
+  });
+
+  try {
+    const catalogResult = await scrapeBrunswickManufacturerCatalog({
+      sourceUrl: options.sourceUrl,
+      brandName: options.brandName,
+      maxPages: options.maxPages,
+      scrapeDelayMs: options.scrapeDelayMs,
+    });
+
+    if (catalogResult.parseFailures.length > 0) {
+      const errorMessage = `One or more ${sourceName} catalog cards failed to parse.`;
+
+      await failScrapeRun(scrapeRun.id, errorMessage, {
+        mode: "job",
+        sourceUrl: catalogResult.sourceUrl,
+        sourceUrls: catalogResult.sourceUrls,
+        discoveredCount: catalogResult.discoveredCount,
+        parsedCount: catalogResult.parsedCount,
+        failureCount: catalogResult.failureCount,
+        parseFailures: catalogResult.parseFailures,
+      });
+
+      return {
+        sourceName,
+        status: "failed",
+        scrapeRunId: scrapeRun.id,
+        discoveredCount: catalogResult.discoveredCount,
+        parsedCount: catalogResult.parsedCount,
+        failureCount: catalogResult.failureCount,
+        error: errorMessage,
+        details: catalogResult.parseFailures,
+      };
+    }
+
+    const syncResult = await syncManufacturerCatalog(
+      sourceName,
+      catalogResult.parsedBalls
+    );
+
+    await completeScrapeRun(scrapeRun.id, {
+      itemsFound: catalogResult.discoveredCount,
+      itemsCreated: syncResult.created.length,
+      itemsUpdated: syncResult.updated.length + syncResult.relisted.length,
+      itemsRemoved: syncResult.removed.length,
+      metadata: {
+        mode: "job",
+        sourceUrl: catalogResult.sourceUrl,
+        sourceUrls: catalogResult.sourceUrls,
+        discoveredCount: catalogResult.discoveredCount,
+        parsedCount: catalogResult.parsedCount,
+        syncResult,
+      },
+    });
+
+    return {
+      sourceName,
+      status: "success",
+      scrapeRunId: scrapeRun.id,
+      discoveredCount: catalogResult.discoveredCount,
+      parsedCount: catalogResult.parsedCount,
+      failureCount: catalogResult.failureCount,
+      itemsCreated: syncResult.created.length,
+      itemsUpdated: syncResult.updated.length + syncResult.relisted.length,
+      itemsRemoved: syncResult.removed.length,
+      details: syncResult,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : `Unknown ${sourceName} sync error`;
+
+    await failScrapeRun(scrapeRun.id, message, {
+      mode: "job",
+      purpose: "discover_parse_and_sync_current_catalog",
+      sourceUrl: options.sourceUrl,
+    });
+
+    return {
+      sourceName,
+      status: "failed",
+      scrapeRunId: scrapeRun.id,
+      error: message,
+    };
+  }
+}
+
 export async function runTrackedManufacturerSourceSync(source: {
   id: string;
   name: string;
@@ -232,6 +337,15 @@ export async function runTrackedManufacturerSourceSync(source: {
   if (source.parserKey === "motiv") {
     return runMotivManufacturerSync({
       sourceUrl: source.url,
+    });
+  }
+
+  if (source.parserKey === "brunswick") {
+    return runBrunswickManufacturerSync({
+      sourceUrl: source.url,
+      brandName: source.brandName ?? source.manufacturerName,
+      maxPages: source.maxPages,
+      scrapeDelayMs: source.scrapeDelayMs,
     });
   }
 
