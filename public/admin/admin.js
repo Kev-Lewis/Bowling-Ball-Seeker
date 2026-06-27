@@ -6,6 +6,7 @@ let navHighlightTimeout = null;
 let lastScrapeOutput = null;
 let lastCandidatePreviewOutput = null;
 let dashboardSummaryRefreshTimeout = null;
+let lastTrackedSources = [];
 
 function setStatus(message, state = "ready") {
   if (globalStatusText) {
@@ -18,93 +19,6 @@ function setStatus(message, state = "ready") {
     globalStatus.classList.remove("is-ready", "is-loading", "is-error");
     globalStatus.classList.add(`is-${state}`);
   }
-}
-
-function setText(id, value) {
-  const element = document.getElementById(id);
-
-  if (!element) {
-    return;
-  }
-
-  element.textContent = value;
-}
-
-function formatDateTime(value) {
-  if (!value) {
-    return "No completed run";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown time";
-  }
-
-  return date.toLocaleString();
-}
-
-async function loadDashboardSummary() {
-  try {
-    const data = await apiGet("/api/retailers/dashboard-summary");
-    renderDashboardSummary(data);
-  } catch (error) {
-    setText("summaryTotalListings", "—");
-    setText("summaryTotalListingsHelp", "Unable to load listings");
-    setText("summaryManualMatches", "—");
-    setText("summaryManualMatchesHelp", "Unable to load manual matches");
-    setText("summarySkippedNoMatch", "—");
-    setText("summarySkippedNoMatchHelp", "Unable to load match review");
-    setText("summaryLastScrape", "Error");
-    setText("summaryLastScrapeHelp", error.message);
-    setStatus("Error", "error");
-  }
-}
-
-function renderDashboardSummary(data) {
-  const listings = data.listings ?? {};
-  const matchReview = data.matchReview ?? {};
-  const latestRun = data.latestRetailerScrapeRun;
-
-  setText("summaryTotalListings", listings.total ?? 0);
-  setText(
-    "summaryTotalListingsHelp",
-    `${listings.autoMatched ?? 0} auto • ${listings.likelyMatched ?? 0} likely`
-  );
-
-  setText("summaryManualMatches", listings.manuallyMatched ?? 0);
-  setText(
-    "summaryManualMatchesHelp",
-    `${listings.manualReview ?? 0} manual review • ${listings.rejected ?? 0} rejected`
-  );
-
-  setText("summarySkippedNoMatch", matchReview.uniqueSkippedNoMatchCount ?? 0);
-  setText(
-    "summarySkippedNoMatchHelp",
-    `${matchReview.uniqueSkippedNeedsReviewCount ?? 0} need review`
-  );
-
-  if (!latestRun) {
-    setText("summaryLastScrape", "None");
-    setText("summaryLastScrapeHelp", "No retailer scrape run found");
-    return;
-  }
-
-  setText("summaryLastScrape", latestRun.status ?? "unknown");
-  setText(
-    "summaryLastScrapeHelp",
-    `${latestRun.sourceName ?? "retailer"} • ${formatDateTime(
-      latestRun.finishedAt ?? latestRun.startedAt
-    )}`
-  );
-}
-
-function scheduleDashboardSummaryRefresh() {
-  window.clearTimeout(dashboardSummaryRefreshTimeout);
-
-  dashboardSummaryRefreshTimeout = window.setTimeout(() => {
-    loadDashboardSummary();
-  }, 250);
 }
 
 function setupInfoButtons() {
@@ -357,6 +271,93 @@ function getInputValue(id) {
   return document.getElementById(id).value.trim();
 }
 
+function setText(id, value) {
+  const element = document.getElementById(id);
+
+  if (!element) {
+    return;
+  }
+
+  element.textContent = value;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "No completed run";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown time";
+  }
+
+  return date.toLocaleString();
+}
+
+async function loadDashboardSummary() {
+  try {
+    const data = await apiGet("/api/retailers/dashboard-summary");
+    renderDashboardSummary(data);
+  } catch (error) {
+    setText("summaryTotalListings", "—");
+    setText("summaryTotalListingsHelp", "Unable to load listings");
+    setText("summaryManualMatches", "—");
+    setText("summaryManualMatchesHelp", "Unable to load manual matches");
+    setText("summarySkippedNoMatch", "—");
+    setText("summarySkippedNoMatchHelp", "Unable to load match review");
+    setText("summaryLastScrape", "Error");
+    setText("summaryLastScrapeHelp", error.message);
+    setStatus("Error", "error");
+  }
+}
+
+function renderDashboardSummary(data) {
+  const listings = data.listings ?? {};
+  const matchReview = data.matchReview ?? {};
+  const latestRun = data.latestRetailerScrapeRun;
+
+  setText("summaryTotalListings", listings.total ?? 0);
+  setText(
+    "summaryTotalListingsHelp",
+    `${listings.autoMatched ?? 0} auto • ${listings.likelyMatched ?? 0} likely`
+  );
+
+  setText("summaryManualMatches", listings.manuallyMatched ?? 0);
+  setText(
+    "summaryManualMatchesHelp",
+    `${listings.manualReview ?? 0} manual review • ${listings.rejected ?? 0} rejected`
+  );
+
+  setText("summarySkippedNoMatch", matchReview.uniqueSkippedNoMatchCount ?? 0);
+  setText(
+    "summarySkippedNoMatchHelp",
+    `${matchReview.uniqueSkippedNeedsReviewCount ?? 0} need review`
+  );
+
+  if (!latestRun) {
+    setText("summaryLastScrape", "None");
+    setText("summaryLastScrapeHelp", "No retailer scrape run found");
+    return;
+  }
+
+  setText("summaryLastScrape", latestRun.status ?? "unknown");
+  setText(
+    "summaryLastScrapeHelp",
+    `${latestRun.sourceName ?? "retailer"} • ${formatDateTime(
+      latestRun.finishedAt ?? latestRun.startedAt
+    )}`
+  );
+}
+
+function scheduleDashboardSummaryRefresh() {
+  window.clearTimeout(dashboardSummaryRefreshTimeout);
+
+  dashboardSummaryRefreshTimeout = window.setTimeout(() => {
+    loadDashboardSummary();
+  }, 250);
+}
+
 async function runCategoryScrape() {
   try {
     const query = encodeQuery({
@@ -370,10 +371,10 @@ async function runCategoryScrape() {
     const data = await apiGet(`/api/jobs/bowling-com-category-scrape/run?${query}`);
 
     lastScrapeOutput = data;
-renderJson("scrapeOutput", data);
-updateScrapeSummary(data);
-openScrapeOutputModal();
-scheduleDashboardSummaryRefresh();
+    renderJson("scrapeOutput", data);
+    updateScrapeSummary(data);
+    openScrapeOutputModal();
+    scheduleDashboardSummaryRefresh();
   } catch (error) {
     const errorOutput = { error: error.message };
 
@@ -386,6 +387,244 @@ scheduleDashboardSummaryRefresh();
       skippedCount: 0,
     });
     openScrapeOutputModal();
+    setStatus("Error", "error");
+  }
+}
+
+async function loadTrackedSources() {
+  try {
+    const query = encodeQuery({
+      retailerName: getInputValue("trackedRetailerNameFilter"),
+      sourceKind: getInputValue("trackedSourceKindFilter"),
+      enabled: getInputValue("trackedEnabledFilter"),
+    });
+
+    const data = await apiGet(`/api/tracked-retailer-sources?${query}`);
+    renderTrackedSources(data);
+  } catch (error) {
+    document.getElementById("trackedSourcesTable").innerHTML = `<pre>${escapeHtml(
+      error.message
+    )}</pre>`;
+    setStatus("Error", "error");
+  }
+}
+
+async function seedTrackedSources() {
+  try {
+    const data = await apiGet("/api/tracked-retailer-sources/seed-defaults");
+
+    const summary = document.getElementById("trackedSourcesSummary");
+    if (summary) {
+      summary.textContent = `Seeded ${data.count ?? 0} default tracked sources.`;
+    }
+
+    await loadTrackedSources();
+  } catch (error) {
+    const summary = document.getElementById("trackedSourcesSummary");
+    if (summary) {
+      summary.textContent = `Seed defaults error: ${error.message}`;
+    }
+
+    setStatus("Error", "error");
+  }
+}
+
+function renderTrackedSources(data) {
+  lastTrackedSources = data.data ?? [];
+
+  const summary = document.getElementById("trackedSourcesSummary");
+  if (summary) {
+    summary.textContent = `Showing ${data.count ?? 0} tracked sources.`;
+  }
+
+  const rows = lastTrackedSources
+    .map((source) => {
+      const encodedSourceId = encodeURIComponent(source.id);
+      const enabledClass = source.enabled ? "enabled" : "disabled";
+      const enabledText = source.enabled ? "enabled" : "disabled";
+      const toggleText = source.enabled ? "Disable" : "Enable";
+      const nextEnabled = source.enabled ? "false" : "true";
+
+      return `
+        <tr class="listing-row">
+          <td>
+            <strong>${escapeHtml(source.name)}</strong><br />
+            <span class="muted">${escapeHtml(source.id)}</span>
+          </td>
+          <td class="cell-url">
+            <a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">
+              ${escapeHtml(source.url)}
+            </a>
+            <br />
+            <span class="muted">${escapeHtml(source.retailerName)} • ${escapeHtml(
+        source.sourceKind
+      )}</span>
+          </td>
+          <td>
+            <span class="muted">
+              pages ${escapeHtml(source.maxPages ?? "—")} • products ${escapeHtml(
+        source.maxProducts ?? "—"
+      )}
+            </span>
+            <br />
+            <span class="muted">
+              delay ${escapeHtml(source.scrapeDelayMs ?? "—")}ms • likely ${escapeHtml(
+        source.allowLikelyMatch
+      )}
+            </span>
+          </td>
+          <td>
+            <span class="pill ${enabledClass}">${enabledText}</span>
+          </td>
+          <td>
+            <div class="cell-actions">
+              <button onclick="runTrackedSourceFromEncoded('${encodedSourceId}')">Run</button>
+              <button class="secondary" onclick="useTrackedSourceFromEncoded('${encodedSourceId}')">
+                Use
+              </button>
+              <button
+                class="${source.enabled ? "danger" : "secondary"}"
+                onclick="setTrackedSourceEnabledFromEncoded('${encodedSourceId}', '${nextEnabled}')"
+              >
+                ${toggleText}
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  document.getElementById("trackedSourcesTable").innerHTML = `
+    <table class="source-table">
+      <colgroup>
+        <col />
+        <col />
+        <col />
+        <col />
+        <col />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>URL</th>
+          <th>Config</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>${rows || `<tr><td colspan="5">No tracked sources found.</td></tr>`}</tbody>
+    </table>
+  `;
+}
+
+function getTrackedSourceById(sourceId) {
+  return lastTrackedSources.find((source) => source.id === sourceId);
+}
+
+async function runTrackedSourceFromEncoded(encodedSourceId) {
+  await runTrackedSource(decodeURIComponent(encodedSourceId));
+}
+
+async function runTrackedSource(sourceId) {
+  try {
+    const source = getTrackedSourceById(sourceId);
+
+    if (!source) {
+      throw new Error(`Tracked source not loaded: ${sourceId}`);
+    }
+
+    if (!source.enabled) {
+      throw new Error(`Tracked source is disabled: ${source.name}`);
+    }
+
+    const data = await apiGet(
+      `/api/tracked-retailer-sources/run?id=${encodeURIComponent(sourceId)}`
+    );
+
+    lastScrapeOutput = data;
+    renderJson("scrapeOutput", data);
+    updateScrapeSummary(data.result ?? data);
+    openScrapeOutputModal();
+
+    const summary = document.getElementById("trackedSourcesSummary");
+    if (summary) {
+      const result = data.result ?? {};
+      summary.textContent = `Ran ${source.name}: ${
+        result.scrapedCount ?? 0
+      } scraped, ${result.savedCount ?? 0} saved.`;
+    }
+
+    scheduleDashboardSummaryRefresh();
+    loadListings();
+  } catch (error) {
+    const errorOutput = { error: error.message };
+
+    lastScrapeOutput = errorOutput;
+    renderJson("scrapeOutput", errorOutput);
+    openScrapeOutputModal();
+    setStatus("Error", "error");
+  }
+}
+
+function useTrackedSourceFromEncoded(encodedSourceId) {
+  useTrackedSource(decodeURIComponent(encodedSourceId));
+}
+
+function useTrackedSource(sourceId) {
+  const source = getTrackedSourceById(sourceId);
+
+  if (!source) {
+    setStatus("Error", "error");
+    return;
+  }
+
+  document.getElementById("categoryUrl").value = source.url;
+  document.getElementById("maxPages").value = source.maxPages ?? 1;
+  document.getElementById("maxProducts").value = source.maxProducts ?? 5;
+  document.getElementById("scrapeDelayMs").value = source.scrapeDelayMs ?? 750;
+  document.getElementById("allowLikelyMatch").value = String(source.allowLikelyMatch);
+
+  const summary = document.getElementById("scrapeOutputSummary");
+  if (summary) {
+    summary.textContent = `Loaded tracked source into scraper controls: ${source.name}.`;
+  }
+
+  setStatus("Source loaded", "ready");
+
+  const target = document.getElementById("scraper-controls");
+  if (target) {
+    target.classList.add("nav-highlight");
+    window.setTimeout(() => target.classList.remove("nav-highlight"), 1200);
+  }
+}
+
+async function setTrackedSourceEnabledFromEncoded(encodedSourceId, enabledValue) {
+  await setTrackedSourceEnabled(decodeURIComponent(encodedSourceId), enabledValue === "true");
+}
+
+async function setTrackedSourceEnabled(sourceId, enabled) {
+  try {
+    const data = await apiGet(
+      `/api/tracked-retailer-sources/set-enabled?id=${encodeURIComponent(
+        sourceId
+      )}&enabled=${enabled}`
+    );
+
+    const summary = document.getElementById("trackedSourcesSummary");
+    if (summary) {
+      summary.textContent = `${data.data?.name ?? "Tracked source"} set to ${
+        enabled ? "enabled" : "disabled"
+      }.`;
+    }
+
+    await loadTrackedSources();
+  } catch (error) {
+    const summary = document.getElementById("trackedSourcesSummary");
+    if (summary) {
+      summary.textContent = `Enable/disable error: ${error.message}`;
+    }
+
     setStatus("Error", "error");
   }
 }
@@ -601,8 +840,8 @@ async function manualAssign(dryRun) {
 
     const data = await apiGet(`/api/retailers/match-review/resolve?${query}`);
     renderJson("manualAssignOutput", data);
-scheduleDashboardSummaryRefresh();
-setStatus(dryRun ? "Dry run complete" : "Manual assignment complete", "ready");
+    scheduleDashboardSummaryRefresh();
+    setStatus(dryRun ? "Dry run complete" : "Manual assignment complete", "ready");
   } catch (error) {
     renderJson("manualAssignOutput", { error: error.message });
     setStatus("Error", "error");
@@ -765,6 +1004,14 @@ document
   .addEventListener("click", runCategoryScrape);
 
 document
+  .getElementById("loadTrackedSourcesBtn")
+  .addEventListener("click", loadTrackedSources);
+
+document
+  .getElementById("seedTrackedSourcesBtn")
+  .addEventListener("click", seedTrackedSources);
+
+document
   .getElementById("loadSkippedBtn")
   .addEventListener("click", loadSkippedReviews);
 
@@ -790,5 +1037,6 @@ document.getElementById("loadManualListingsBtn").addEventListener("click", () =>
 });
 
 loadDashboardSummary();
+loadTrackedSources();
 loadSkippedReviews();
 loadListings();

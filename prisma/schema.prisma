@@ -8,30 +8,30 @@ datasource db {
 }
 
 model Ball {
-  id                    String   @id
-  canonicalName         String
-  brand                 String
-  manufacturer          String
-  coverstockName        String?
-  coverstockType        String
-  coreName              String?
-  coreType              String
-  factoryFinish         String?
-  rg                    Float?
-  differential          Float?
-  mbDifferential        Float?
-  availableWeightsJson  String?
-  officialUrl           String?
-  imageUrl              String?
-  isCurrent             Boolean  @default(true)
-  firstSeenAt           DateTime
-  lastSeenAt            DateTime
-  removedFromLineupAt   DateTime?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                   String    @id
+  canonicalName        String
+  brand                String
+  manufacturer         String
+  coverstockName       String?
+  coverstockType       String
+  coreName             String?
+  coreType             String
+  factoryFinish        String?
+  rg                   Float?
+  differential         Float?
+  mbDifferential       Float?
+  availableWeightsJson String?
+  officialUrl          String?
+  imageUrl             String?
+  isCurrent            Boolean   @default(true)
+  firstSeenAt          DateTime
+  lastSeenAt           DateTime
+  removedFromLineupAt  DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  listings              RetailerListing[]
-  lineupEvents          LineupEvent[]
+  listings     RetailerListing[]
+  lineupEvents LineupEvent[]
 
   @@index([canonicalName])
   @@index([brand])
@@ -39,23 +39,23 @@ model Ball {
 }
 
 model RetailerListing {
-  id                String   @id
-  ballId            String
-  retailerName      String
-  retailerType      String
-  listingTitle      String
-  listingUrl        String
-  condition         String
-  matchConfidence   Int
-  matchStatus       String
-  currentPrice      Float
-  stockStatus       String
-  lastCheckedAt     DateTime
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id              String   @id
+  ballId          String
+  retailerName    String
+  retailerType    String
+  listingTitle    String
+  listingUrl      String
+  condition       String
+  matchConfidence Int
+  matchStatus     String
+  currentPrice    Float
+  stockStatus     String
+  lastCheckedAt   DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  ball              Ball            @relation(fields: [ballId], references: [id])
-  priceHistory      PriceSnapshot[]
+  ball         Ball            @relation(fields: [ballId], references: [id])
+  priceHistory PriceSnapshot[]
 
   @@index([ballId])
   @@index([retailerName])
@@ -63,30 +63,30 @@ model RetailerListing {
 }
 
 model PriceSnapshot {
-  id                  String   @id
-  retailerListingId   String
-  price               Float
-  stockStatus         String
-  checkedAt           DateTime
-  createdAt           DateTime @default(now())
+  id                String   @id
+  retailerListingId String
+  price             Float
+  stockStatus       String
+  checkedAt         DateTime
+  createdAt         DateTime @default(now())
 
-  listing             RetailerListing @relation(fields: [retailerListingId], references: [id])
+  listing RetailerListing @relation(fields: [retailerListingId], references: [id])
 
   @@index([retailerListingId])
   @@index([checkedAt])
 }
 
 model LineupEvent {
-  id          String   @id
-  ballId      String?
-  eventType   String
-  sourceName  String
-  sourceUrl   String?
-  detectedAt  DateTime
-  notes       String?
-  createdAt   DateTime @default(now())
+  id         String   @id
+  ballId     String?
+  eventType  String
+  sourceName String
+  sourceUrl  String?
+  detectedAt DateTime
+  notes      String?
+  createdAt  DateTime @default(now())
 
-  ball        Ball?    @relation(fields: [ballId], references: [id])
+  ball Ball? @relation(fields: [ballId], references: [id])
 
   @@index([ballId])
   @@index([eventType])
@@ -94,20 +94,20 @@ model LineupEvent {
 }
 
 model ScrapeRun {
-  id             String   @id
-  sourceName     String
-  sourceType     String
-  status         String
-  startedAt      DateTime @default(now())
-  finishedAt     DateTime?
-  itemsFound     Int      @default(0)
-  itemsCreated   Int      @default(0)
-  itemsUpdated   Int      @default(0)
-  itemsRemoved   Int      @default(0)
-  errorMessage   String?
-  metadataJson   String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id           String    @id
+  sourceName   String
+  sourceType   String
+  status       String
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  itemsFound   Int       @default(0)
+  itemsCreated Int       @default(0)
+  itemsUpdated Int       @default(0)
+  itemsRemoved Int       @default(0)
+  errorMessage String?
+  metadataJson String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([sourceName])
   @@index([sourceType])
@@ -116,18 +116,18 @@ model ScrapeRun {
 }
 
 model AlertLog {
-  id                 String   @id
-  dedupeKey          String
-  destinationType    String
-  destinationId      String?
-  destinationKey     String
-  alertType          String
-  ballId             String?
-  retailerListingId  String?
-  message            String
-  payloadJson        String?
-  sentAt             DateTime
-  createdAt          DateTime @default(now())
+  id                String   @id
+  dedupeKey         String
+  destinationType   String
+  destinationId     String?
+  destinationKey    String
+  alertType         String
+  ballId            String?
+  retailerListingId String?
+  message           String
+  payloadJson       String?
+  sentAt            DateTime
+  createdAt         DateTime @default(now())
 
   @@unique([dedupeKey, destinationKey])
   @@index([alertType])
@@ -135,4 +135,24 @@ model AlertLog {
   @@index([retailerListingId])
   @@index([destinationType])
   @@index([sentAt])
+}
+
+model TrackedRetailerSource {
+  id               String   @id
+  name             String
+  retailerName     String
+  sourceKind       String
+  url              String
+  enabled          Boolean  @default(true)
+  maxPages         Int?
+  maxProducts      Int?
+  scrapeDelayMs    Int?
+  allowLikelyMatch Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([retailerName, url])
+  @@index([retailerName])
+  @@index([sourceKind])
+  @@index([enabled])
 }

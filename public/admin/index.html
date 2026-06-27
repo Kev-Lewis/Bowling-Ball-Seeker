@@ -329,15 +329,15 @@
       }
 
       .summary-card-helper {
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.25;
-}
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 0.88rem;
+        line-height: 1.25;
+      }
 
-.summary-card-value.is-small {
-  font-size: 1rem;
-}
+      .summary-card-value.is-small {
+        font-size: 1rem;
+      }
 
       .dashboard-stack {
         display: grid;
@@ -621,6 +621,26 @@
         width: 12%;
       }
 
+      .source-table col:nth-child(1) {
+        width: 25%;
+      }
+
+      .source-table col:nth-child(2) {
+        width: 30%;
+      }
+
+      .source-table col:nth-child(3) {
+        width: 17%;
+      }
+
+      .source-table col:nth-child(4) {
+        width: 10%;
+      }
+
+      .source-table col:nth-child(5) {
+        width: 18%;
+      }
+
       th,
       td {
         text-align: left;
@@ -651,14 +671,18 @@
       .review-table th:nth-child(3),
       .review-table td:nth-child(3),
       .review-table th:nth-child(4),
-      .review-table td:nth-child(4) {
+      .review-table td:nth-child(4),
+      .source-table th:nth-child(4),
+      .source-table td:nth-child(4) {
         text-align: center;
       }
 
       .listing-table th:nth-child(6),
       .listing-table td:nth-child(6),
       .review-table th:nth-child(5),
-      .review-table td:nth-child(5) {
+      .review-table td:nth-child(5),
+      .source-table th:nth-child(5),
+      .source-table td:nth-child(5) {
         text-align: right;
       }
 
@@ -733,6 +757,18 @@
         white-space: nowrap;
       }
 
+      .pill.enabled {
+        background: var(--accent-soft);
+        border-color: var(--accent-border);
+        color: #0f6a3d;
+      }
+
+      .pill.disabled {
+        background: #f5f6f8;
+        border-color: var(--border);
+        color: var(--muted);
+      }
+
       .candidate {
         border: 1px solid var(--border-strong);
         background: linear-gradient(180deg, #ffffff, var(--surface-soft));
@@ -740,6 +776,17 @@
         border-radius: 16px;
         margin-top: 12px;
         box-shadow: var(--shadow-row);
+      }
+
+      .cell-url {
+        word-break: break-word;
+      }
+
+      .cell-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
       }
 
       #manualAssignOutput {
@@ -822,8 +869,14 @@
         .listing-table th,
         .listing-table td,
         .review-table th,
-        .review-table td {
+        .review-table td,
+        .source-table th,
+        .source-table td {
           text-align: left !important;
+        }
+
+        .cell-actions {
+          justify-content: flex-start;
         }
       }
 
@@ -897,6 +950,9 @@
             <a class="nav-jump" href="#candidate-preview" data-target="candidate-preview">
               Candidate Preview
             </a>
+            <a class="nav-jump" href="#tracked-sources" data-target="tracked-sources">
+              Tracked Sources
+            </a>
             <a class="nav-jump" href="#match-review" data-target="match-review">
               Match Review
             </a>
@@ -917,38 +973,38 @@
       </div>
 
       <div class="summary-grid" aria-label="Admin dashboard summary">
-  <div class="summary-card">
-    <div class="summary-card-label">Retailer Listings</div>
-    <div id="summaryTotalListings" class="summary-card-value">—</div>
-    <div id="summaryTotalListingsHelp" class="summary-card-helper">
-      Saved price listings
-    </div>
-  </div>
+        <div class="summary-card">
+          <div class="summary-card-label">Retailer Listings</div>
+          <div id="summaryTotalListings" class="summary-card-value">—</div>
+          <div id="summaryTotalListingsHelp" class="summary-card-helper">
+            Saved price listings
+          </div>
+        </div>
 
-  <div class="summary-card">
-    <div class="summary-card-label">Manual Matches</div>
-    <div id="summaryManualMatches" class="summary-card-value">—</div>
-    <div id="summaryManualMatchesHelp" class="summary-card-helper">
-      Protected assignments
-    </div>
-  </div>
+        <div class="summary-card">
+          <div class="summary-card-label">Manual Matches</div>
+          <div id="summaryManualMatches" class="summary-card-value">—</div>
+          <div id="summaryManualMatchesHelp" class="summary-card-helper">
+            Protected assignments
+          </div>
+        </div>
 
-  <div class="summary-card">
-    <div class="summary-card-label">No-Match Reviews</div>
-    <div id="summarySkippedNoMatch" class="summary-card-value">—</div>
-    <div id="summarySkippedNoMatchHelp" class="summary-card-helper">
-      Unique skipped listings
-    </div>
-  </div>
+        <div class="summary-card">
+          <div class="summary-card-label">No-Match Reviews</div>
+          <div id="summarySkippedNoMatch" class="summary-card-value">—</div>
+          <div id="summarySkippedNoMatchHelp" class="summary-card-helper">
+            Unique skipped listings
+          </div>
+        </div>
 
-  <div class="summary-card">
-    <div class="summary-card-label">Last Retailer Scrape</div>
-    <div id="summaryLastScrape" class="summary-card-value">—</div>
-    <div id="summaryLastScrapeHelp" class="summary-card-helper">
-      No run loaded
-    </div>
-  </div>
-</div>
+        <div class="summary-card">
+          <div class="summary-card-label">Last Retailer Scrape</div>
+          <div id="summaryLastScrape" class="summary-card-value">—</div>
+          <div id="summaryLastScrapeHelp" class="summary-card-helper">
+            No run loaded
+          </div>
+        </div>
+      </div>
 
       <div class="dashboard-stack">
         <div class="top-tools-grid">
@@ -1046,6 +1102,54 @@
             </div>
           </section>
         </div>
+
+        <section id="tracked-sources" class="widget">
+          <div class="widget-head">
+            <div class="widget-title-row">
+              <h2>Tracked Sources</h2>
+              <button class="info-button" data-info-target="trackedSourcesInfo">Info</button>
+            </div>
+            <div id="trackedSourcesInfo" class="widget-description" hidden>
+              Saved retailer source configs for category and product scrapes.
+            </div>
+          </div>
+
+          <div class="widget-body">
+            <div class="grid grid-3">
+              <div>
+                <label for="trackedRetailerNameFilter">Retailer Name</label>
+                <input id="trackedRetailerNameFilter" value="bowling.com" />
+              </div>
+              <div>
+                <label for="trackedSourceKindFilter">Source Kind</label>
+                <select id="trackedSourceKindFilter">
+                  <option value="">any</option>
+                  <option value="category">category</option>
+                  <option value="product">product</option>
+                </select>
+              </div>
+              <div>
+                <label for="trackedEnabledFilter">Enabled</label>
+                <select id="trackedEnabledFilter">
+                  <option value="">any</option>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row" style="margin-top: 16px">
+              <button id="loadTrackedSourcesBtn">Load Sources</button>
+              <button id="seedTrackedSourcesBtn" class="secondary">Seed Defaults</button>
+            </div>
+
+            <div id="trackedSourcesSummary" class="output-summary">
+              Tracked sources will appear here.
+            </div>
+
+            <div id="trackedSourcesTable"></div>
+          </div>
+        </section>
 
         <section id="match-review" class="widget">
           <div class="widget-head">
