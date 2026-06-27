@@ -21,6 +21,10 @@ import { getRecentSkippedMatchReviews } from "../services/retailerMatchReviewSer
 import { resolveRetailerListingMatch } from "../services/manualRetailerMatchService";
 import { getRetailerMatchCandidates } from "../services/retailerMatchCandidateService";
 import { cleanupDuplicateRetailerListings } from "../services/retailerListingCleanupService";
+import {
+  getRetailerListingAdminDetail,
+  getRetailerListingAdminList,
+} from "../services/retailerListingAdminService";
 
 export const retailerRoutes = Router();
 
@@ -87,6 +91,63 @@ function getBooleanQuery(value: unknown, fallback = false) {
   }
 
   return fallback;
+}
+
+function getNumberQuery(value: unknown, fallback: number) {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+function getOptionalBooleanQuery(value: unknown) {
+  const parsed = value?.toString().trim().toLowerCase();
+
+  if (parsed === "true" || parsed === "1" || parsed === "yes") {
+    return true;
+  }
+
+  if (parsed === "false" || parsed === "0" || parsed === "no") {
+    return false;
+  }
+
+  return undefined;
+}
+
+function getStringQuery(value: unknown) {
+  const parsed = value?.toString().trim();
+
+  return parsed || undefined;
+}
+
+function getMatchStatusQuery(value: unknown) {
+  const parsed = value?.toString().trim();
+
+  if (!parsed) {
+    return undefined;
+  }
+
+  const allowedStatuses = new Set([
+    "auto_matched",
+    "likely_match",
+    "manual_review",
+    "manually_matched",
+    "rejected",
+  ]);
+
+  if (!allowedStatuses.has(parsed)) {
+    return null;
+  }
+
+  return parsed as
+    | "auto_matched"
+    | "likely_match"
+    | "manual_review"
+    | "manually_matched"
+    | "rejected";
 }
 
 retailerRoutes.get("/inspect-page", async (req, res) => {
@@ -623,6 +684,77 @@ retailerRoutes.get("/cleanup/duplicate-listings", async (req, res) => {
 
     return res.status(500).json({
       error: "Failed to clean up duplicate retailer listings",
+      details: message,
+    });
+  }
+});
+
+retailerRoutes.get("/listings", async (req, res) => {
+  try {
+    const matchStatus = getMatchStatusQuery(req.query.matchStatus);
+
+    if (matchStatus === null) {
+      return res.status(400).json({
+        error:
+          "Invalid matchStatus. Use auto_matched, likely_match, manual_review, manually_matched, or rejected.",
+      });
+    }
+
+    const result = await getRetailerListingAdminList({
+      limit: getNumberQuery(req.query.limit, 50),
+      ballId: getStringQuery(req.query.ballId),
+      brand: getStringQuery(req.query.brand),
+      manufacturer: getStringQuery(req.query.manufacturer),
+      retailerName: getStringQuery(req.query.retailerName),
+      matchStatus,
+      stockStatus: getStringQuery(req.query.stockStatus),
+      verifiedOnly: getOptionalBooleanQuery(req.query.verifiedOnly),
+      search: getStringQuery(req.query.search),
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown retailer listing admin lookup error";
+
+    return res.status(500).json({
+      error: "Failed to load retailer listings",
+      details: message,
+    });
+  }
+});
+
+retailerRoutes.get("/listings/:listingId", async (req, res) => {
+  try {
+    const listingId = req.params.listingId.trim();
+
+    const result = await getRetailerListingAdminDetail(listingId);
+
+    if (!result) {
+      return res.status(404).json({
+        error: "Retailer listing not found",
+      });
+    }
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown retailer listing detail lookup error";
+
+    return res.status(500).json({
+      error: "Failed to load retailer listing detail",
       details: message,
     });
   }
