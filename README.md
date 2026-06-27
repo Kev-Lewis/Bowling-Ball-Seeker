@@ -6,7 +6,7 @@ The project tracks currently available bowling balls from official manufacturer 
 
 ## Goals
 
-- Track current U.S.-available bowling balls.
+- Track current U.S. available bowling balls.
 - Pull official ball metadata from manufacturer websites.
 - Track prices from trusted retailers and marketplaces.
 - Store daily price snapshots.
