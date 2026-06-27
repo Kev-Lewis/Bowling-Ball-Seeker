@@ -32,6 +32,7 @@ export async function runMotivManufacturerSync(
     metadata: {
       mode: "job",
       purpose: "discover_parse_and_sync_current_catalog",
+      sourceUrl: options.sourceUrl ?? null,
     },
   });
 
@@ -100,6 +101,7 @@ export async function runMotivManufacturerSync(
     await failScrapeRun(scrapeRun.id, message, {
       mode: "job",
       purpose: "discover_parse_and_sync_current_catalog",
+      sourceUrl: options.sourceUrl ?? null,
     });
 
     return {
@@ -158,11 +160,9 @@ export async function runEnabledTrackedManufacturerSources() {
   const results = [];
 
   for (const source of sources) {
-    const result = await runTrackedManufacturerSourceSync(source);
-
     results.push({
       source,
-      result,
+      result: await runTrackedManufacturerSourceSync(source),
     });
   }
 
@@ -172,23 +172,23 @@ export async function runEnabledTrackedManufacturerSources() {
 export async function runDailyManufacturerSync() {
   const startedAt = new Date().toISOString();
 
-  const results = await Promise.all([runMotivManufacturerSync()]);
+  const sourceResults = await runEnabledTrackedManufacturerSources();
 
-  const successfulCount = results.filter((result) => {
-    return result.status === "success";
+  const successfulCount = sourceResults.filter((item) => {
+    return item.result.status === "success";
   }).length;
 
-  const failedCount = results.filter((result) => {
-    return result.status === "failed";
+  const failedCount = sourceResults.filter((item) => {
+    return item.result.status === "failed";
   }).length;
 
   return {
     jobName: "daily_manufacturer_sync",
     startedAt,
     finishedAt: new Date().toISOString(),
-    sourceCount: results.length,
+    sourceCount: sourceResults.length,
     successfulCount,
     failedCount,
-    results,
+    results: sourceResults,
   };
 }
