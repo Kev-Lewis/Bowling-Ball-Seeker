@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bowling Ball Seeker Admin</title>
+
+    <style>
+      :root {
+        color-scheme: light;
+
+        --page-bg: #f4f6fa;
+        --surface: #ffffff;
+        --surface-soft: #f8fafc;
+        --surface-row: #fbfcff;
+        --surface-row-hover: #ffffff;
+
+        --console-top: #111827;
+        --console-top-2: #182235;
+        --console-sub: #ffffff;
+
+        --text: #111827;
+        --text-soft: #1f2937;
+        --muted: #5f6b7a;
+        --muted-2: #7a8697;
+
+        --accent: #2ee67b;
+        --accent-dark: #12814a;
+        --accent-soft: #e8fbf0;
+        --accent-border: #b8efce;
+
+        --status-ready: #2ee67b;
+        --status-loading: #f5b942;
+        --status-error: #ff5c5c;
+
+        --button: #43556f;
+        --button-hover: #34445c;
+        --button-border: #52667f;
+
+        --danger: #bd3434;
+        --danger-hover: #972323;
+
+        --link: #1769e0;
+
+        --border: #d6dce5;
+        --border-strong: #c4cfdd;
+        --border-soft: #e8edf4;
+
+        --shadow-sm: 0 4px 14px rgba(16, 24, 40, 0.06);
+        --shadow-md: 0 12px 28px rgba(16, 24, 40, 0.1);
+        --shadow-row: 0 10px 22px rgba(16, 24, 40, 0.06);
+        --shadow-row-hover: 0 16px 32px rgba(16, 24, 40, 0.12);
+
+        --focus: rgba(46, 230, 123, 0.34);
+
+        --radius-sm: 10px;
+        --radius-md: 14px;
+        --radius-lg: 18px;
+        --radius-pill: 999px;
+
+        --font-main: Calibri, "Segoe UI", Arial, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        font-size: 16px;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: var(--font-main);
+        font-size: 1rem;
+        line-height: 1.5;
+        background: var(--page-bg);
+        color: var(--text);
+      }
+
+      a {
+        color: var(--link);
+        font-weight: 700;
+        text-decoration-thickness: 0.08em;
+        text-underline-offset: 0.18em;
+      }
+
+      a:hover {
+        color: #0f4fb3;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible,
+      a:focus-visible {
+        outline: 3px solid var(--focus);
+        outline-offset: 3px;
+      }
+
+      .console-shell {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        box-shadow: 0 2px 12px rgba(15, 23, 42, 0.18);
+      }
+
+      .top-bar {
+        background: linear-gradient(90deg, var(--console-top), var(--console-top-2));
+        color: white;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .top-bar-inner {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 8px 20px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: center;
+      }
+
+      .brand-lockup {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        flex: 0 0 auto;
+        border-radius: 10px;
+        background:
+          radial-gradient(circle at 34% 32%, rgba(255, 255, 255, 0.5), transparent 14px),
+          linear-gradient(135deg, rgba(46, 230, 123, 1), rgba(60, 111, 159, 0.95));
+        box-shadow:
+          0 8px 18px rgba(46, 230, 123, 0.18),
+          inset 0 1px 0 rgba(255, 255, 255, 0.55);
+      }
+
+      .brand-title {
+        display: grid;
+        gap: 0;
+        min-width: 0;
+      }
+
+      .brand-title strong {
+        display: block;
+        color: white;
+        font-size: 1.06rem;
+        line-height: 1.1;
+        white-space: nowrap;
+      }
+
+      .brand-title span {
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 0.8rem;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+
+      .console-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .top-link,
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+        padding: 7px 11px;
+        border-radius: var(--radius-pill);
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.8rem;
+        line-height: 1;
+        font-weight: 700;
+        white-space: nowrap;
+        text-decoration: none;
+      }
+
+      .top-link:hover {
+        background: white;
+        color: #111827;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--status-ready);
+        box-shadow: 0 0 0 5px rgba(46, 230, 123, 0.13);
+      }
+
+      .status-pill.is-ready .status-dot {
+        background: var(--status-ready);
+        box-shadow: 0 0 0 5px rgba(46, 230, 123, 0.13);
+      }
+
+      .status-pill.is-loading .status-dot {
+        background: var(--status-loading);
+        box-shadow: 0 0 0 5px rgba(245, 185, 66, 0.16);
+      }
+
+      .status-pill.is-error .status-dot {
+        background: var(--status-error);
+        box-shadow: 0 0 0 5px rgba(255, 92, 92, 0.16);
+      }
+
+      .sub-bar {
+        background: var(--console-sub);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .sub-bar-inner {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 8px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+      }
+
+      .nav-pills {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .nav-pills a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 34px;
+        padding: 8px 13px;
+        color: var(--text-soft);
+        text-decoration: none;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        font-size: 0.92rem;
+        line-height: 1;
+        font-weight: 700;
+      }
+
+      .nav-pills a:hover {
+        background: var(--surface-soft);
+        border-color: var(--border);
+        color: var(--text);
+      }
+
+      main {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 22px 20px 42px;
+      }
+
+      .console-home-head {
+        display: block;
+        margin-bottom: 16px;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin: 0;
+        color: var(--text);
+        font-size: clamp(1.55rem, 2.2vw, 2rem);
+        line-height: 1.1;
+        letter-spacing: -0.018em;
+      }
+
+      .console-home-head p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 0.98rem;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .summary-card {
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm);
+        padding: 16px;
+      }
+
+      .summary-card-label {
+        color: var(--muted);
+        font-size: 0.8rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.045em;
+      }
+
+      .summary-card-value {
+        margin-top: 8px;
+        color: var(--text);
+        font-size: 1.1rem;
+        font-weight: 700;
+      }
+
+      .dashboard-stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .top-tools-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 16px;
+        align-items: stretch;
+      }
+
+      .top-tools-grid > .widget {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .top-tools-grid > .widget .widget-body {
+        flex: 1;
+      }
+
+      .widget {
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+        transition:
+          border-color 180ms ease,
+          box-shadow 180ms ease,
+          transform 180ms ease;
+      }
+
+      .widget.nav-highlight {
+        border-color: rgba(46, 230, 123, 0.95);
+        box-shadow:
+          0 0 0 4px rgba(46, 230, 123, 0.18),
+          var(--shadow-md);
+        transform: translateY(-2px);
+      }
+
+      .widget-head {
+        padding: 16px 18px 12px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      .widget-title-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 1.28rem;
+        line-height: 1.2;
+        color: var(--text);
+      }
+
+      .info-button {
+        min-height: auto;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: #1769e0;
+        box-shadow: none;
+        border-radius: 0;
+        font-size: 0.78rem;
+        line-height: 1;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .info-button:hover {
+        background: transparent;
+        box-shadow: none;
+        transform: none;
+        color: #0f4fb3;
+        text-decoration: underline;
+      }
+
+      .widget-description {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--border-soft);
+        background: var(--surface-soft);
+        border-radius: var(--radius-md);
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.35;
+      }
+
+      .widget-description[hidden] {
+        display: none;
+      }
+
+      .widget-body {
+        padding: 16px 18px 18px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+
+      .grid-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .grid-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      label {
+        display: block;
+        color: var(--muted);
+        margin-bottom: 7px;
+        font-size: 0.8125rem;
+        line-height: 1.25;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.045em;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        min-height: 42px;
+        padding: 9px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border-strong);
+        background: #ffffff;
+        color: var(--text);
+        outline: none;
+      }
+
+      input:hover,
+      select:hover,
+      textarea:hover {
+        border-color: #aebbd0;
+      }
+
+      input:focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--accent-dark);
+        box-shadow: 0 0 0 3px var(--focus);
+        background: #ffffff;
+      }
+
+      button {
+        min-height: 40px;
+        padding: 9px 15px;
+        border: 1px solid var(--button-border);
+        background: linear-gradient(180deg, #4a5d79, var(--button));
+        color: #ffffff;
+        border-radius: var(--radius-pill);
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.92rem;
+        box-shadow: 0 7px 14px rgba(31, 45, 68, 0.13);
+      }
+
+      button:hover {
+        background: linear-gradient(180deg, #5a6d8a, var(--button-hover));
+        transform: translateY(-1px);
+        box-shadow: 0 10px 20px rgba(31, 45, 68, 0.18);
+      }
+
+      button.secondary {
+        background: #ffffff;
+        color: var(--button);
+        border-color: var(--border-strong);
+        box-shadow: none;
+      }
+
+      button.secondary:hover {
+        background: var(--surface-soft);
+        color: var(--text);
+        transform: none;
+        box-shadow: none;
+      }
+
+      button.danger {
+        border-color: var(--danger);
+        background: linear-gradient(180deg, #d94a4a, var(--danger));
+      }
+
+      button.danger:hover {
+        background: linear-gradient(180deg, #bd3434, var(--danger-hover));
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: end;
+        flex-wrap: wrap;
+      }
+
+      .row[style*="margin-top"] {
+        margin-top: 16px !important;
+      }
+
+      .output-summary {
+        margin-top: 14px;
+        padding: 11px 12px;
+        border: 1px solid var(--border-soft);
+        background: var(--surface-soft);
+        border-radius: var(--radius-md);
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.35;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .listing-summary {
+        margin-top: 20px;
+        margin-bottom: 10px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0 10px;
+        margin-top: 12px;
+        table-layout: fixed;
+      }
+
+      .listing-table col:nth-child(1) {
+        width: 30%;
+      }
+
+      .listing-table col:nth-child(2) {
+        width: 24%;
+      }
+
+      .listing-table col:nth-child(3) {
+        width: 10%;
+      }
+
+      .listing-table col:nth-child(4) {
+        width: 11%;
+      }
+
+      .listing-table col:nth-child(5) {
+        width: 15%;
+      }
+
+      .listing-table col:nth-child(6) {
+        width: 10%;
+      }
+
+      .review-table col:nth-child(1) {
+        width: 42%;
+      }
+
+      .review-table col:nth-child(2) {
+        width: 13%;
+      }
+
+      .review-table col:nth-child(3) {
+        width: 15%;
+      }
+
+      .review-table col:nth-child(4) {
+        width: 18%;
+      }
+
+      .review-table col:nth-child(5) {
+        width: 12%;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 14px 16px;
+        vertical-align: middle;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 0.8125rem;
+        line-height: 1.25;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.045em;
+      }
+
+      .listing-table th:nth-child(3),
+      .listing-table td:nth-child(3),
+      .review-table th:nth-child(2),
+      .review-table td:nth-child(2) {
+        text-align: right;
+      }
+
+      .listing-table th:nth-child(4),
+      .listing-table td:nth-child(4),
+      .listing-table th:nth-child(5),
+      .listing-table td:nth-child(5),
+      .review-table th:nth-child(3),
+      .review-table td:nth-child(3),
+      .review-table th:nth-child(4),
+      .review-table td:nth-child(4) {
+        text-align: center;
+      }
+
+      .listing-table th:nth-child(6),
+      .listing-table td:nth-child(6),
+      .review-table th:nth-child(5),
+      .review-table td:nth-child(5) {
+        text-align: right;
+      }
+
+      tbody tr.listing-row {
+        background: var(--surface-row);
+        border-radius: 16px;
+        box-shadow:
+          0 0 0 1px var(--border-strong),
+          var(--shadow-row);
+        transition:
+          transform 160ms ease,
+          box-shadow 160ms ease,
+          background 160ms ease;
+      }
+
+      tbody tr.listing-row:hover {
+        background: var(--surface-row-hover);
+        transform: translateY(-2px);
+        box-shadow:
+          0 0 0 1px rgba(46, 230, 123, 0.35),
+          var(--shadow-row-hover);
+      }
+
+      tbody tr.listing-row td:first-child {
+        border-top-left-radius: 16px;
+        border-bottom-left-radius: 16px;
+      }
+
+      tbody tr.listing-row td:last-child {
+        border-top-right-radius: 16px;
+        border-bottom-right-radius: 16px;
+      }
+
+      .listing-detail-row td {
+        padding: 0 16px 16px;
+      }
+
+      .inline-detail,
+      pre {
+        background:
+          radial-gradient(circle at 100% 0%, rgba(46, 230, 123, 0.1), transparent 18rem),
+          #162033;
+        color: #eef6ff;
+        border: 1px solid #2b3b55;
+        padding: 16px;
+        border-radius: 16px;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.07),
+          0 10px 24px rgba(17, 24, 39, 0.12);
+        font-size: 0.9rem;
+        line-height: 1.55;
+        max-height: 420px;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        min-height: 26px;
+        padding: 5px 10px;
+        border-radius: var(--radius-pill);
+        background: #ffffff;
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-size: 0.78rem;
+        line-height: 1.1;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .candidate {
+        border: 1px solid var(--border-strong);
+        background: linear-gradient(180deg, #ffffff, var(--surface-soft));
+        padding: 16px;
+        border-radius: 16px;
+        margin-top: 12px;
+        box-shadow: var(--shadow-row);
+      }
+
+      #manualAssignOutput {
+        margin-top: 16px;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+        background: rgba(15, 23, 42, 0.58);
+        backdrop-filter: blur(5px);
+      }
+
+      .modal-backdrop[hidden] {
+        display: none !important;
+      }
+
+      .modal-panel {
+        width: min(980px, 100%);
+        max-height: min(760px, 88vh);
+        display: flex;
+        flex-direction: column;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.32);
+        overflow: hidden;
+      }
+
+      .modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--border-soft);
+      }
+
+      .modal-head h2 {
+        font-size: 1.2rem;
+      }
+
+      .modal-body {
+        padding: 18px;
+        overflow: auto;
+      }
+
+      .modal-body pre {
+        margin: 0;
+        max-height: none;
+      }
+
+      @media (max-width: 1100px) {
+        .top-tools-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .summary-grid,
+        .grid-3,
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+
+        .top-bar-inner {
+          grid-template-columns: 1fr;
+        }
+
+        .console-actions {
+          justify-content: flex-start;
+        }
+
+        table {
+          table-layout: auto;
+        }
+
+        .listing-table th,
+        .listing-table td,
+        .review-table th,
+        .review-table td {
+          text-align: left !important;
+        }
+      }
+
+      @media (max-width: 680px) {
+        html {
+          font-size: 15px;
+        }
+
+        main {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+
+        .top-bar-inner,
+        .sub-bar-inner {
+          padding-left: 12px;
+          padding-right: 12px;
+        }
+
+        .brand-title span,
+        .top-link {
+          display: none;
+        }
+
+        .nav-pills a {
+          flex: 1 1 100%;
+        }
+
+        th,
+        td {
+          padding: 12px;
+        }
+
+        .modal-backdrop {
+          padding: 12px;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="console-shell">
+      <div class="top-bar">
+        <div class="top-bar-inner">
+          <div class="brand-lockup">
+            <div class="brand-mark" aria-hidden="true"></div>
+            <div class="brand-title">
+              <strong>Bowling Ball Seeker Admin</strong>
+              <span>Scraper review, listing matching, and manual assignments</span>
+            </div>
+          </div>
+
+          <div class="console-actions" aria-label="Admin utility links">
+            <a class="top-link" href="https://kevinlewis.net" target="_blank" rel="noreferrer">
+              KevinLewis.net
+            </a>
+            <div id="globalStatus" class="status-pill is-ready" role="status" aria-live="polite">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span id="globalStatusText">Ready</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sub-bar">
+        <div class="sub-bar-inner">
+          <nav class="nav-pills" aria-label="Admin sections">
+            <a class="nav-jump" href="#scraper-controls" data-target="scraper-controls">
+              Scraper Controls
+            </a>
+            <a class="nav-jump" href="#candidate-preview" data-target="candidate-preview">
+              Candidate Preview
+            </a>
+            <a class="nav-jump" href="#match-review" data-target="match-review">
+              Match Review
+            </a>
+            <a class="nav-jump" href="#retailer-listings" data-target="retailer-listings">
+              Retailer Listings
+            </a>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="console-home-head">
+        <div>
+          <h1>Console Home</h1>
+          <p>Manage bowling ball retailer listings, scraper jobs, match review, and manual assignments.</p>
+        </div>
+      </div>
+
+      <div class="summary-grid" aria-label="Admin dashboard summary">
+        <div class="summary-card">
+          <div class="summary-card-label">Listings</div>
+          <div class="summary-card-value">Retailer Data</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-card-label">Mode</div>
+          <div class="summary-card-value">Local Admin</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-card-label">Match Safety</div>
+          <div class="summary-card-value">Protected</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-card-label">Review Flow</div>
+          <div class="summary-card-value">Manual Assign</div>
+        </div>
+      </div>
+
+      <div class="dashboard-stack">
+        <div class="top-tools-grid">
+          <section id="scraper-controls" class="widget">
+            <div class="widget-head">
+              <div class="widget-title-row">
+                <h2>Scraper Controls</h2>
+                <button class="info-button" data-info-target="scraperInfo">Info</button>
+              </div>
+              <div id="scraperInfo" class="widget-description" hidden>
+                Run small, controlled category scrapes during testing.
+              </div>
+            </div>
+
+            <div class="widget-body">
+              <div class="grid grid-2">
+                <div>
+                  <label for="categoryUrl">Bowling.com Category URL</label>
+                  <input
+                    id="categoryUrl"
+                    value="https://www.bowling.com/shopping/motiv/bowling-balls/all"
+                  />
+                </div>
+                <div>
+                  <label for="maxPages">Max Pages</label>
+                  <input id="maxPages" type="number" value="1" />
+                </div>
+                <div>
+                  <label for="maxProducts">Max Products</label>
+                  <input id="maxProducts" type="number" value="5" />
+                </div>
+                <div>
+                  <label for="scrapeDelayMs">Scrape Delay MS</label>
+                  <input id="scrapeDelayMs" type="number" value="750" />
+                </div>
+                <div>
+                  <label for="allowLikelyMatch">Allow Likely Match</label>
+                  <select id="allowLikelyMatch">
+                    <option value="true" selected>true</option>
+                    <option value="false">false</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="row" style="margin-top: 16px">
+                <button id="runCategoryScrapeBtn">Run Category Scrape</button>
+                <button id="viewScrapeOutputBtn" class="secondary" hidden>
+                  View Last Run
+                </button>
+              </div>
+
+              <div id="scrapeOutputSummary" class="output-summary">
+                No scrape has been run yet.
+              </div>
+            </div>
+          </section>
+
+          <section id="candidate-preview" class="widget">
+            <div class="widget-head">
+              <div class="widget-title-row">
+                <h2>Candidate Preview</h2>
+                <button class="info-button" data-info-target="candidateInfo">Info</button>
+              </div>
+              <div id="candidateInfo" class="widget-description" hidden>
+                Preview possible official catalog matches before assigning.
+              </div>
+            </div>
+
+            <div class="widget-body">
+              <div class="grid grid-2">
+                <div>
+                  <label for="candidateListingUrl">Listing URL</label>
+                  <input id="candidateListingUrl" placeholder="https://www.bowling.com/products/..." />
+                </div>
+                <div>
+                  <label for="manualBallId">Manual Ball ID</label>
+                  <input id="manualBallId" placeholder="motiv-venom-hysteria" />
+                </div>
+              </div>
+
+              <div class="row" style="margin-top: 16px">
+                <button id="previewCandidatesBtn">Preview Candidates</button>
+                <button id="viewCandidatePreviewBtn" class="secondary" hidden>
+                  View Last Preview
+                </button>
+                <button id="manualDryRunBtn">Manual Assign Dry Run</button>
+                <button id="manualAssignBtn" class="danger">Manual Assign Real</button>
+              </div>
+
+              <div id="candidatePreviewSummary" class="output-summary">
+                No candidate preview has been run yet.
+              </div>
+
+              <pre id="manualAssignOutput">Manual assignment output will appear here.</pre>
+            </div>
+          </section>
+        </div>
+
+        <section id="match-review" class="widget">
+          <div class="widget-head">
+            <div class="widget-title-row">
+              <h2>Skipped Match Review</h2>
+              <button class="info-button" data-info-target="matchReviewInfo">Info</button>
+            </div>
+            <div id="matchReviewInfo" class="widget-description" hidden>
+              Inspect unmatched or low-confidence retailer listings.
+            </div>
+          </div>
+
+          <div class="widget-body">
+            <div class="grid grid-3">
+              <div>
+                <label for="skippedStatus">Status</label>
+                <select id="skippedStatus">
+                  <option value="skipped_no_match" selected>skipped_no_match</option>
+                  <option value="skipped_needs_review">skipped_needs_review</option>
+                </select>
+              </div>
+              <div>
+                <label for="dedupeByListing">Dedupe by Listing</label>
+                <select id="dedupeByListing">
+                  <option value="true" selected>true</option>
+                  <option value="false">false</option>
+                </select>
+              </div>
+              <div>
+                <label for="skippedLimit">Limit</label>
+                <input id="skippedLimit" type="number" value="20" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-top: 16px">
+              <button id="loadSkippedBtn">Load Skipped Reviews</button>
+            </div>
+
+            <div id="skippedReviewTable"></div>
+          </div>
+        </section>
+
+        <section id="retailer-listings" class="widget">
+          <div class="widget-head">
+            <div class="widget-title-row">
+              <h2>Retailer Listings</h2>
+              <button class="info-button" data-info-target="retailerInfo">Info</button>
+            </div>
+            <div id="retailerInfo" class="widget-description" hidden>
+              Browse saved listings, match status, price, stock, and detail JSON.
+            </div>
+          </div>
+
+          <div class="widget-body">
+            <div class="grid grid-3">
+              <div>
+                <label for="listingRetailerName">Retailer Name</label>
+                <input id="listingRetailerName" value="bowling.com" />
+              </div>
+              <div>
+                <label for="listingMatchStatus">Match Status</label>
+                <select id="listingMatchStatus">
+                  <option value="">any</option>
+                  <option value="auto_matched">auto_matched</option>
+                  <option value="likely_match">likely_match</option>
+                  <option value="manual_review">manual_review</option>
+                  <option value="manually_matched">manually_matched</option>
+                  <option value="rejected">rejected</option>
+                </select>
+              </div>
+              <div>
+                <label for="listingSearch">Search</label>
+                <input id="listingSearch" placeholder="Venom, Jackal, Aspire..." />
+              </div>
+              <div>
+                <label for="listingLimit">Limit</label>
+                <input id="listingLimit" type="number" value="20" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-top: 16px">
+              <button id="loadListingsBtn">Load Listings</button>
+              <button id="loadManualListingsBtn">Load Manual Matches</button>
+            </div>
+
+            <div id="listingTable"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="scrapeOutputModal" class="modal-backdrop" hidden>
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="scrapeOutputModalTitle">
+        <div class="modal-head">
+          <h2 id="scrapeOutputModalTitle">Category Scrape Output</h2>
+          <button id="closeScrapeOutputModalBtn" class="secondary">Close</button>
+        </div>
+        <div class="modal-body">
+          <pre id="scrapeOutput">Scrape output will appear here.</pre>
+        </div>
+      </div>
+    </div>
+
+    <div id="candidatePreviewModal" class="modal-backdrop" hidden>
+      <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="candidatePreviewModalTitle">
+        <div class="modal-head">
+          <h2 id="candidatePreviewModalTitle">Candidate Preview</h2>
+          <button id="closeCandidatePreviewModalBtn" class="secondary">Close</button>
+        </div>
+        <div class="modal-body">
+          <div id="candidateOutput"></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./admin.js"></script>
+  </body>
+</html>
