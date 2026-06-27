@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
+  await prisma.lineupEvent.deleteMany();
   await prisma.priceSnapshot.deleteMany();
   await prisma.retailerListing.deleteMany();
   await prisma.ball.deleteMany();
@@ -69,6 +70,39 @@ async function main() {
         firstSeenAt: new Date("2026-06-01T00:00:00.000Z"),
         lastSeenAt: new Date("2026-06-26T00:00:00.000Z"),
         removedFromLineupAt: null,
+      },
+    ],
+  });
+
+  await prisma.lineupEvent.createMany({
+    data: [
+      {
+        id: "event-venom-shock-initial-detection",
+        ballId: "motiv-venom-shock",
+        eventType: "new_ball_detected",
+        sourceName: "Motiv",
+        sourceUrl:
+          "https://www.motivbowling.com/products/balls/light-medium-oil/venom-shock.html",
+        detectedAt: new Date("2026-06-26T00:00:00.000Z"),
+        notes: "Seed event representing initial catalog detection.",
+      },
+      {
+        id: "event-ion-max-initial-detection",
+        ballId: "storm-ion-max",
+        eventType: "new_ball_detected",
+        sourceName: "Storm",
+        sourceUrl: "",
+        detectedAt: new Date("2026-06-26T00:00:00.000Z"),
+        notes: "Seed event representing initial catalog detection.",
+      },
+      {
+        id: "event-exit-initial-detection",
+        ballId: "roto-grip-exit",
+        eventType: "new_ball_detected",
+        sourceName: "Roto Grip",
+        sourceUrl: "",
+        detectedAt: new Date("2026-06-26T00:00:00.000Z"),
+        notes: "Seed event representing initial catalog detection.",
       },
     ],
   });

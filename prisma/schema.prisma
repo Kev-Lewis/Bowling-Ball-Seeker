@@ -31,6 +31,7 @@ model Ball {
   updatedAt             DateTime @updatedAt
 
   listings              RetailerListing[]
+  lineupEvents          LineupEvent[]
 
   @@index([canonicalName])
   @@index([brand])
@@ -73,4 +74,21 @@ model PriceSnapshot {
 
   @@index([retailerListingId])
   @@index([checkedAt])
+}
+
+model LineupEvent {
+  id          String   @id
+  ballId      String?
+  eventType   String
+  sourceName  String
+  sourceUrl   String?
+  detectedAt  DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  ball        Ball?    @relation(fields: [ballId], references: [id])
+
+  @@index([ballId])
+  @@index([eventType])
+  @@index([detectedAt])
 }
