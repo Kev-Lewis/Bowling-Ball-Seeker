@@ -92,3 +92,25 @@ model LineupEvent {
   @@index([eventType])
   @@index([detectedAt])
 }
+
+model ScrapeRun {
+  id             String   @id
+  sourceName     String
+  sourceType     String
+  status         String
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+  itemsFound     Int      @default(0)
+  itemsCreated   Int      @default(0)
+  itemsUpdated   Int      @default(0)
+  itemsRemoved   Int      @default(0)
+  errorMessage   String?
+  metadataJson   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([sourceName])
+  @@index([sourceType])
+  @@index([status])
+  @@index([startedAt])
+}

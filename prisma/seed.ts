@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
+  await prisma.scrapeRun.deleteMany();
   await prisma.lineupEvent.deleteMany();
   await prisma.priceSnapshot.deleteMany();
   await prisma.retailerListing.deleteMany();

@@ -6,6 +6,7 @@ import { priceRoutes } from "./routes/priceRoutes";
 import { statsRoutes } from "./routes/statsRoutes";
 import { eventRoutes } from "./routes/eventRoutes";
 import { catalogSyncRoutes } from "./routes/catalogSyncRoutes";
+import { scrapeRunRoutes } from "./routes/scrapeRunRoutes";
 
 dotenv.config();
 
@@ -29,6 +30,7 @@ app.use("/api/prices", priceRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/catalog-sync", catalogSyncRoutes);
+app.use("/api/scrape-runs", scrapeRunRoutes);
 
 app.listen(PORT, () => {
   console.log(`Bowling Ball Seeker API running on http://localhost:${PORT}`);
