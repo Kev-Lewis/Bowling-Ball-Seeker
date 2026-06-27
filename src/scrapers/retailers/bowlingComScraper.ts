@@ -186,6 +186,89 @@ function getFallbackTitle($: cheerio.CheerioAPI) {
   return title || null;
 }
 
+function getCurrentPageFromUrl(url: string) {
+  const parsedUrl = new URL(url);
+  const page = Number(parsedUrl.searchParams.get("page") ?? "1");
+
+  if (!Number.isFinite(page) || page < 1) {
+    return 1;
+  }
+
+  return page;
+}
+
+function buildCategoryPageUrl(url: string, page: number) {
+  const parsedUrl = new URL(url);
+
+  if (page <= 1) {
+    parsedUrl.searchParams.delete("page");
+  } else {
+    parsedUrl.searchParams.set("page", page.toString());
+  }
+
+  return parsedUrl.toString();
+}
+
+function isSameCategoryPath(baseUrl: string, candidateUrl: string) {
+  const base = new URL(baseUrl);
+  const candidate = new URL(candidateUrl);
+
+  return (
+    base.hostname === candidate.hostname &&
+    base.pathname === candidate.pathname
+  );
+}
+
+function parseBowlingComCategoryPagination(
+  url: string,
+  $: cheerio.CheerioAPI
+): BowlingComCategoryPagination {
+  const currentPage = getCurrentPageFromUrl(url);
+  const discoveredPages = new Set<number>([currentPage]);
+  let explicitNextPageUrl: string | null = null;
+
+  $("a[href]").each((_index, element) => {
+    const href = $(element).attr("href");
+    const absoluteUrl = href ? normalizeAbsoluteUrl(href, url) : null;
+
+    if (!absoluteUrl || !isSameCategoryPath(url, absoluteUrl)) {
+      return;
+    }
+
+    const parsedUrl = new URL(absoluteUrl);
+    const page = Number(parsedUrl.searchParams.get("page") ?? "1");
+
+    if (Number.isFinite(page) && page >= 1) {
+      discoveredPages.add(page);
+    }
+
+    const text = cleanText($(element).text()).toLowerCase();
+
+    if (text === ">" || text.includes("next")) {
+      explicitNextPageUrl = absoluteUrl;
+    }
+  });
+
+  const sortedPages = [...discoveredPages].sort((a, b) => a - b);
+  const maxDiscoveredPage =
+    sortedPages.length > 0 ? sortedPages[sortedPages.length - 1] : null;
+
+  const numericNextPage =
+    maxDiscoveredPage !== null && maxDiscoveredPage > currentPage
+      ? buildCategoryPageUrl(url, currentPage + 1)
+      : null;
+
+  const nextPageUrl = explicitNextPageUrl ?? numericNextPage;
+
+  return {
+    currentPage,
+    discoveredPages: sortedPages,
+    maxDiscoveredPage,
+    nextPageUrl,
+    hasNextPage: Boolean(nextPageUrl),
+  };
+}
+
 export function parseBowlingComProductHtml(
   url: string,
   html: string
@@ -247,6 +330,19 @@ export interface BowlingComCategoryProductCandidate {
   imageUrl: string | null;
   currentPrice: number | null;
   source: "json_ld_collection" | "product_link_candidate";
+}
+
+export interface BowlingComCategoryPagination {
+  currentPage: number;
+  discoveredPages: number[];
+  maxDiscoveredPage: number | null;
+  nextPageUrl: string | null;
+  hasNextPage: boolean;
+}
+
+export interface BowlingComCategoryPagesOptions {
+  startPage?: number;
+  maxPages?: number;
 }
 
 function getNestedRecord(value: JsonRecord, key: string) {
@@ -442,6 +538,7 @@ export function parseBowlingComCategoryHtml(url: string, html: string) {
     count: products.length,
     sourceStrategy:
       jsonLdProducts.length > 0 ? "json_ld_collection" : "product_links",
+    pagination: parseBowlingComCategoryPagination(url, $),
     data: products,
   };
 }
@@ -459,4 +556,78 @@ export async function scrapeBowlingComCategoryPage(url: string) {
   });
 
   return parseBowlingComCategoryHtml(url, response.data);
+}
+
+export async function scrapeBowlingComCategoryPages(
+  url: string,
+  options: BowlingComCategoryPagesOptions = {}
+) {
+  assertBowlingComCategoryUrl(url);
+
+  const startedAt = new Date().toISOString();
+  const startPage = options.startPage ?? getCurrentPageFromUrl(url);
+  const maxPages = options.maxPages ?? 50;
+
+  const seenProductUrls = new Set<string>();
+  const products: BowlingComCategoryProductCandidate[] = [];
+  const pages = [];
+
+  let currentPage = startPage;
+
+  while (currentPage <= maxPages) {
+    const pageUrl = buildCategoryPageUrl(url, currentPage);
+    const pageResult = await scrapeBowlingComCategoryPage(pageUrl);
+
+    let newProductCount = 0;
+
+    for (const product of pageResult.data) {
+      if (seenProductUrls.has(product.url)) {
+        continue;
+      }
+
+      seenProductUrls.add(product.url);
+      products.push(product);
+      newProductCount += 1;
+    }
+
+    pages.push({
+      page: currentPage,
+      url: pageUrl,
+      title: pageResult.title,
+      count: pageResult.count,
+      newProductCount,
+      sourceStrategy: pageResult.sourceStrategy,
+      pagination: pageResult.pagination,
+    });
+
+    if (pageResult.count === 0) {
+      break;
+    }
+
+    if (newProductCount === 0 && currentPage > startPage) {
+      break;
+    }
+
+    if (
+      !pageResult.pagination.hasNextPage &&
+      (pageResult.pagination.maxDiscoveredPage ?? currentPage) <= currentPage
+    ) {
+      break;
+    }
+
+    currentPage += 1;
+  }
+
+  return {
+    sourceName: "bowling.com",
+    sourceUrl: url,
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    startPage,
+    maxPages,
+    pageCount: pages.length,
+    productCount: products.length,
+    pages,
+    data: products,
+  };
 }

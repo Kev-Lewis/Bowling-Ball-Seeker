@@ -14,6 +14,7 @@ import { getBallPriceSummary } from "../services/ballPriceSummaryService";
 import { inspectRetailerPage } from "../scrapers/retailers/retailerInspector";
 import {
   scrapeBowlingComCategoryPage,
+  scrapeBowlingComCategoryPages,
   scrapeBowlingComProductPage,
 } from "../scrapers/retailers/bowlingComScraper";
 
@@ -149,6 +150,33 @@ retailerRoutes.get("/bowling-com/parse-category", async (req, res) => {
 
     return res.status(400).json({
       error: "Failed to parse Bowling.com category page",
+      details: message,
+    });
+  }
+});
+
+retailerRoutes.get("/bowling-com/parse-category-pages", async (req, res) => {
+  try {
+    const url = getRequiredString(req.query.url, "url");
+    const maxPages = Number(req.query.maxPages ?? 50);
+
+    const result = await scrapeBowlingComCategoryPages(url, {
+      maxPages: Number.isFinite(maxPages) && maxPages > 0 ? maxPages : 50,
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown Bowling.com category pages parse error";
+
+    return res.status(400).json({
+      error: "Failed to parse Bowling.com category pages",
       details: message,
     });
   }
