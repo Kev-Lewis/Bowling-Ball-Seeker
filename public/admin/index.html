@@ -503,6 +503,12 @@
         box-shadow: 0 10px 20px rgba(31, 45, 68, 0.18);
       }
 
+      button:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+        transform: none;
+      }
+
       button.secondary {
         background: #ffffff;
         color: var(--button);
@@ -633,6 +639,30 @@
         width: 18%;
       }
 
+      .catalog-ball-table col:nth-child(1) {
+        width: 25%;
+      }
+
+      .catalog-ball-table col:nth-child(2) {
+        width: 24%;
+      }
+
+      .catalog-ball-table col:nth-child(3) {
+        width: 20%;
+      }
+
+      .catalog-ball-table col:nth-child(4) {
+        width: 10%;
+      }
+
+      .catalog-ball-table col:nth-child(5) {
+        width: 9%;
+      }
+
+      .catalog-ball-table col:nth-child(6) {
+        width: 12%;
+      }
+
       th,
       td {
         text-align: left;
@@ -665,7 +695,11 @@
       .review-table th:nth-child(4),
       .review-table td:nth-child(4),
       .source-table th:nth-child(4),
-      .source-table td:nth-child(4) {
+      .source-table td:nth-child(4),
+      .catalog-ball-table th:nth-child(4),
+      .catalog-ball-table td:nth-child(4),
+      .catalog-ball-table th:nth-child(5),
+      .catalog-ball-table td:nth-child(5) {
         text-align: center;
       }
 
@@ -674,7 +708,9 @@
       .review-table th:nth-child(5),
       .review-table td:nth-child(5),
       .source-table th:nth-child(5),
-      .source-table td:nth-child(5) {
+      .source-table td:nth-child(5),
+      .catalog-ball-table th:nth-child(6),
+      .catalog-ball-table td:nth-child(6) {
         text-align: right;
       }
 
@@ -863,7 +899,9 @@
         .review-table th,
         .review-table td,
         .source-table th,
-        .source-table td {
+        .source-table td,
+        .catalog-ball-table th,
+        .catalog-ball-table td {
           text-align: left !important;
         }
 
@@ -944,6 +982,9 @@
             </a>
             <a class="nav-jump" href="#tracked-sources" data-target="tracked-sources">
               Tracked Sources
+            </a>
+            <a class="nav-jump" href="#catalog-balls" data-target="catalog-balls">
+              Catalog Balls
             </a>
             <a class="nav-jump" href="#match-review" data-target="match-review">
               Match Review
@@ -1201,6 +1242,58 @@
             </div>
 
             <div id="trackedSourcesTable"></div>
+          </div>
+        </section>
+
+        <section id="catalog-balls" class="widget">
+          <div class="widget-head">
+            <div class="widget-title-row">
+              <h2>Catalog Balls</h2>
+              <button class="info-button" data-info-target="catalogBallsInfo">Info</button>
+            </div>
+            <div id="catalogBallsInfo" class="widget-description" hidden>
+              Search, view, create, and edit canonical catalog balls used for retailer matching.
+            </div>
+          </div>
+
+          <div class="widget-body">
+            <div class="grid grid-3">
+              <div>
+                <label for="catalogBallSearch">Search</label>
+                <input id="catalogBallSearch" placeholder="Concept, Phaze, Venom..." />
+              </div>
+              <div>
+                <label for="catalogBallBrandFilter">Brand</label>
+                <input id="catalogBallBrandFilter" placeholder="Storm" />
+              </div>
+              <div>
+                <label for="catalogBallManufacturerFilter">Manufacturer</label>
+                <input id="catalogBallManufacturerFilter" placeholder="Storm" />
+              </div>
+              <div>
+                <label for="catalogBallIsCurrentFilter">Is Current</label>
+                <select id="catalogBallIsCurrentFilter">
+                  <option value="">any</option>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              </div>
+              <div>
+                <label for="catalogBallLimit">Limit</label>
+                <input id="catalogBallLimit" type="number" value="50" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-top: 16px">
+              <button id="loadCatalogBallsBtn">Load Catalog Balls</button>
+              <button id="newCatalogBallBtn" class="secondary">New Catalog Ball</button>
+            </div>
+
+            <div id="catalogBallsSummary" class="output-summary">
+              Catalog balls will appear here.
+            </div>
+
+            <div id="catalogBallsTable"></div>
           </div>
         </section>
 

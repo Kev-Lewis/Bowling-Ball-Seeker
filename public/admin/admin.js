@@ -2,11 +2,13 @@ const globalStatus = document.getElementById("globalStatus");
 const globalStatusText = document.getElementById("globalStatusText");
 
 let activeListingDetailId = null;
+let activeCatalogBallDetailId = null;
 let navHighlightTimeout = null;
 let lastScrapeOutput = null;
 let lastCandidatePreviewOutput = null;
 let dashboardSummaryRefreshTimeout = null;
 let lastTrackedSources = [];
+let lastCatalogBalls = [];
 let catalogBallListingContext = null;
 let isCreatingCatalogBall = false;
 
@@ -263,6 +265,28 @@ function closeCatalogBallModal() {
   modal.setAttribute("hidden", "");
 }
 
+function setCatalogBallModalTitle(value) {
+  const title = document.getElementById("catalogBallModalTitle");
+
+  if (title) {
+    title.textContent = value;
+  }
+}
+
+function setCatalogBallAssignButtonVisible(isVisible) {
+  const button = document.getElementById("createAndAssignCatalogBallBtn");
+
+  if (!button) {
+    return;
+  }
+
+  if (isVisible) {
+    button.removeAttribute("hidden");
+  } else {
+    button.setAttribute("hidden", "");
+  }
+}
+
 function slugify(value) {
   return String(value ?? "")
     .toLowerCase()
@@ -293,6 +317,91 @@ function setCatalogBallValue(id, value) {
   element.value = value ?? "";
 }
 
+function getCatalogBallWeightsText(ball) {
+  const weights = ball?.availableWeights;
+
+  if (Array.isArray(weights)) {
+    return weights.join(",");
+  }
+
+  if (typeof ball?.availableWeightsJson === "string") {
+    try {
+      const parsed = JSON.parse(ball.availableWeightsJson);
+      return Array.isArray(parsed) ? parsed.join(",") : "";
+    } catch {
+      return "";
+    }
+  }
+
+  return "";
+}
+
+function fillCatalogBallForm(ball) {
+  setCatalogBallValue("catalogBallId", ball?.id ?? "");
+  setCatalogBallValue("catalogBallBrand", ball?.brand ?? "");
+  setCatalogBallValue("catalogBallManufacturer", ball?.manufacturer ?? ball?.brand ?? "");
+  setCatalogBallValue("catalogBallCanonicalName", ball?.canonicalName ?? "");
+  setCatalogBallValue("catalogBallCoverstockType", ball?.coverstockType ?? "unknown");
+  setCatalogBallValue("catalogBallCoreType", ball?.coreType ?? "unknown");
+  setCatalogBallValue("catalogBallCoverstockName", ball?.coverstockName ?? "");
+  setCatalogBallValue("catalogBallCoreName", ball?.coreName ?? "");
+  setCatalogBallValue("catalogBallFactoryFinish", ball?.factoryFinish ?? "");
+  setCatalogBallValue("catalogBallRg", ball?.rg ?? "");
+  setCatalogBallValue("catalogBallDifferential", ball?.differential ?? "");
+  setCatalogBallValue("catalogBallMbDifferential", ball?.mbDifferential ?? "");
+  setCatalogBallValue("catalogBallWeights", getCatalogBallWeightsText(ball));
+  setCatalogBallValue("catalogBallIsCurrent", String(ball?.isCurrent ?? true));
+  setCatalogBallValue("catalogBallOfficialUrl", ball?.officialUrl ?? "");
+  setCatalogBallValue("catalogBallImageUrl", ball?.imageUrl ?? "");
+}
+
+function clearCatalogBallForm() {
+  fillCatalogBallForm({
+    id: "",
+    brand: "",
+    manufacturer: "",
+    canonicalName: "",
+    coverstockType: "unknown",
+    coreType: "unknown",
+    coverstockName: "",
+    coreName: "",
+    factoryFinish: "",
+    rg: "",
+    differential: "",
+    mbDifferential: "",
+    availableWeights: [],
+    isCurrent: true,
+    officialUrl: "",
+    imageUrl: "",
+  });
+}
+
+function openNewCatalogBallModal() {
+  catalogBallListingContext = null;
+
+  clearCatalogBallForm();
+
+  setCatalogBallModalTitle("New Catalog Ball");
+  setCatalogBallAssignButtonVisible(false);
+
+  const context = document.getElementById("catalogBallContext");
+  if (context) {
+    context.textContent = "Create a new canonical catalog ball.";
+  }
+
+  const output = document.getElementById("catalogBallOutput");
+  if (output) {
+    output.textContent = "Fill in the required fields, then save the catalog ball.";
+  }
+
+  const createButton = document.getElementById("createCatalogBallBtn");
+  if (createButton) {
+    createButton.textContent = "Save Catalog Ball";
+  }
+
+  openCatalogBallModal();
+}
+
 function openCreateCatalogBallFromPreview() {
   if (!lastCandidatePreviewOutput) {
     setStatus("Error", "error");
@@ -311,22 +420,27 @@ function openCreateCatalogBallFromPreview() {
     listingUrl,
   };
 
-  setCatalogBallValue("catalogBallId", ballId);
-  setCatalogBallValue("catalogBallBrand", derived.brand);
-  setCatalogBallValue("catalogBallManufacturer", derived.brand);
-  setCatalogBallValue("catalogBallCanonicalName", derived.canonicalName);
-  setCatalogBallValue("catalogBallCoverstockType", "unknown");
-  setCatalogBallValue("catalogBallCoreType", "unknown");
-  setCatalogBallValue("catalogBallCoverstockName", "");
-  setCatalogBallValue("catalogBallCoreName", "");
-  setCatalogBallValue("catalogBallFactoryFinish", "");
-  setCatalogBallValue("catalogBallRg", "");
-  setCatalogBallValue("catalogBallDifferential", "");
-  setCatalogBallValue("catalogBallMbDifferential", "");
-  setCatalogBallValue("catalogBallWeights", "12,13,14,15,16");
-  setCatalogBallValue("catalogBallIsCurrent", "true");
-  setCatalogBallValue("catalogBallOfficialUrl", listingUrl);
-  setCatalogBallValue("catalogBallImageUrl", "");
+  fillCatalogBallForm({
+    id: ballId,
+    brand: derived.brand,
+    manufacturer: derived.brand,
+    canonicalName: derived.canonicalName,
+    coverstockType: "unknown",
+    coreType: "unknown",
+    coverstockName: "",
+    coreName: "",
+    factoryFinish: "",
+    rg: "",
+    differential: "",
+    mbDifferential: "",
+    availableWeights: [12, 13, 14, 15, 16],
+    isCurrent: true,
+    officialUrl: listingUrl,
+    imageUrl: "",
+  });
+
+  setCatalogBallModalTitle("Create Catalog Ball");
+  setCatalogBallAssignButtonVisible(true);
 
   const context = document.getElementById("catalogBallContext");
   if (context) {
@@ -338,7 +452,64 @@ function openCreateCatalogBallFromPreview() {
     output.textContent = "Review or fill in missing specs, then create the catalog ball.";
   }
 
+  const createButton = document.getElementById("createCatalogBallBtn");
+  if (createButton) {
+    createButton.textContent = "Create Catalog Ball";
+  }
+
   openCatalogBallModal();
+}
+
+function openEditCatalogBallFromEncoded(encodedBallId) {
+  openEditCatalogBall(decodeURIComponent(encodedBallId));
+}
+
+async function openEditCatalogBall(ballId) {
+  try {
+    catalogBallListingContext = null;
+
+    let ball = lastCatalogBalls.find((item) => item.id === ballId);
+
+    if (!ball) {
+      const detail = await apiGet(
+        `/api/admin/catalog-balls/detail?id=${encodeURIComponent(ballId)}`
+      );
+      ball = detail.data;
+    }
+
+    if (!ball) {
+      throw new Error(`Catalog ball not found: ${ballId}`);
+    }
+
+    fillCatalogBallForm(ball);
+
+    setCatalogBallModalTitle(`Edit Catalog Ball: ${ball.id}`);
+    setCatalogBallAssignButtonVisible(false);
+
+    const context = document.getElementById("catalogBallContext");
+    if (context) {
+      context.textContent = `Editing ${ball.brand} ${ball.canonicalName}.`;
+    }
+
+    const output = document.getElementById("catalogBallOutput");
+    if (output) {
+      output.textContent = "Update fields, then save the catalog ball.";
+    }
+
+    const createButton = document.getElementById("createCatalogBallBtn");
+    if (createButton) {
+      createButton.textContent = "Save Catalog Ball";
+    }
+
+    openCatalogBallModal();
+  } catch (error) {
+    setStatus("Error", "error");
+
+    const summary = document.getElementById("catalogBallsSummary");
+    if (summary) {
+      summary.textContent = `Catalog ball edit error: ${error.message}`;
+    }
+  }
 }
 
 function getCatalogBallPayload() {
@@ -383,14 +554,14 @@ async function createCatalogBall(assignAfterCreate = false) {
 
     if (createButton) {
       createButton.disabled = true;
-      createButton.textContent = "Creating...";
+      createButton.textContent = "Saving...";
     }
 
     if (createAndAssignButton) {
       createAndAssignButton.disabled = true;
       createAndAssignButton.textContent = assignAfterCreate
         ? "Creating & Assigning..."
-        : "Creating...";
+        : "Saving...";
     }
 
     const payload = getCatalogBallPayload();
@@ -413,7 +584,7 @@ async function createCatalogBall(assignAfterCreate = false) {
     }
 
     const query = encodeQuery(payload);
-    const createdBall = await apiGet(`/api/admin/catalog-balls/upsert?${query}`);
+    const savedBall = await apiGet(`/api/admin/catalog-balls/upsert?${query}`);
 
     let assignment = null;
 
@@ -421,23 +592,25 @@ async function createCatalogBall(assignAfterCreate = false) {
       const listingUrl =
         catalogBallListingContext?.listingUrl || getInputValue("candidateListingUrl");
 
-      assignment = await assignListingToBall(listingUrl, createdBall.data.id, false);
-      document.getElementById("manualBallId").value = createdBall.data.id;
+      assignment = await assignListingToBall(listingUrl, savedBall.data.id, false);
+      document.getElementById("manualBallId").value = savedBall.data.id;
     }
 
     const output = document.getElementById("catalogBallOutput");
     if (output) {
-      output.textContent = `${createdBall.action === "created" ? "Created" : "Updated"} catalog ball: ${
-        createdBall.data.id
+      output.textContent = `${savedBall.action === "created" ? "Created" : "Updated"} catalog ball: ${
+        savedBall.data.id
       }${assignment ? " and assigned listing." : "."}`;
     }
 
     renderJson("manualAssignOutput", {
-      catalogBall: createdBall,
+      catalogBall: savedBall,
       assignment,
     });
 
     scheduleDashboardSummaryRefresh();
+
+    await loadCatalogBalls();
     await loadSkippedReviews();
     await loadListings();
 
@@ -451,12 +624,21 @@ async function createCatalogBall(assignAfterCreate = false) {
 
       const summary = document.getElementById("candidatePreviewSummary");
       if (summary) {
-        summary.textContent = `Created and assigned listing to ${createdBall.data.id}.`;
+        summary.textContent = `Created and assigned listing to ${savedBall.data.id}.`;
       }
 
       const viewButton = document.getElementById("viewCandidatePreviewBtn");
       if (viewButton) {
         viewButton.setAttribute("hidden", "");
+      }
+    } else {
+      closeCatalogBallModal();
+
+      const summary = document.getElementById("catalogBallsSummary");
+      if (summary) {
+        summary.textContent = `${savedBall.action === "created" ? "Created" : "Updated"} catalog ball: ${
+          savedBall.data.id
+        }.`;
       }
     }
 
@@ -473,7 +655,9 @@ async function createCatalogBall(assignAfterCreate = false) {
 
     if (createButton) {
       createButton.disabled = false;
-      createButton.textContent = "Create Catalog Ball";
+      createButton.textContent = catalogBallListingContext
+        ? "Create Catalog Ball"
+        : "Save Catalog Ball";
     }
 
     if (createAndAssignButton) {
@@ -999,6 +1183,161 @@ async function setTrackedSourceEnabled(sourceId, enabled) {
   }
 }
 
+async function loadCatalogBalls() {
+  try {
+    const query = encodeQuery({
+      limit: getInputValue("catalogBallLimit"),
+      search: getInputValue("catalogBallSearch"),
+      brand: getInputValue("catalogBallBrandFilter"),
+      manufacturer: getInputValue("catalogBallManufacturerFilter"),
+      isCurrent: getInputValue("catalogBallIsCurrentFilter"),
+    });
+
+    const data = await apiGet(`/api/admin/catalog-balls?${query}`);
+    renderCatalogBalls(data);
+  } catch (error) {
+    document.getElementById("catalogBallsTable").innerHTML = `<pre>${escapeHtml(
+      error.message
+    )}</pre>`;
+    setStatus("Error", "error");
+  }
+}
+
+function renderCatalogBalls(data) {
+  lastCatalogBalls = data.data ?? [];
+  activeCatalogBallDetailId = null;
+
+  const summary = document.getElementById("catalogBallsSummary");
+  if (summary) {
+    summary.textContent = `Showing ${data.count ?? 0} catalog balls.`;
+  }
+
+  const rows = lastCatalogBalls
+    .map((ball) => {
+      const encodedBallId = encodeURIComponent(ball.id);
+      const currentClass = ball.isCurrent ? "enabled" : "disabled";
+      const currentText = ball.isCurrent ? "current" : "inactive";
+      const listingCount = ball._count?.listings ?? 0;
+
+      return `
+        <tr class="listing-row" data-catalog-ball-id="${escapeHtml(ball.id)}">
+          <td>
+            <strong>${escapeHtml(ball.brand)} ${escapeHtml(ball.canonicalName)}</strong><br />
+            <span class="muted">${escapeHtml(ball.id)}</span>
+          </td>
+          <td>
+            <span>${escapeHtml(ball.manufacturer)}</span><br />
+            <span class="muted">${escapeHtml(ball.officialUrl || "No official URL")}</span>
+          </td>
+          <td>
+            <span>${escapeHtml(ball.coverstockType || "unknown")} cover</span><br />
+            <span class="muted">${escapeHtml(ball.coreType || "unknown")} core</span>
+          </td>
+          <td>
+            <span class="pill ${currentClass}">${currentText}</span>
+          </td>
+          <td>
+            <span class="pill">${escapeHtml(listingCount)}</span>
+          </td>
+          <td>
+            <div class="cell-actions">
+              <button onclick="toggleCatalogBallDetailFromEncoded('${encodedBallId}')">
+                Detail
+              </button>
+              <button class="secondary" onclick="openEditCatalogBallFromEncoded('${encodedBallId}')">
+                Edit
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  document.getElementById("catalogBallsTable").innerHTML = `
+    <table class="catalog-ball-table">
+      <colgroup>
+        <col />
+        <col />
+        <col />
+        <col />
+        <col />
+        <col />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Ball</th>
+          <th>Manufacturer</th>
+          <th>Specs</th>
+          <th>Current</th>
+          <th>Listings</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>${rows || `<tr><td colspan="6">No catalog balls found.</td></tr>`}</tbody>
+    </table>
+  `;
+}
+
+function removeActiveCatalogBallDetail() {
+  document.querySelectorAll(".catalog-ball-detail-row").forEach((row) => row.remove());
+
+  activeCatalogBallDetailId = null;
+}
+
+async function toggleCatalogBallDetailFromEncoded(encodedBallId) {
+  await toggleCatalogBallDetail(decodeURIComponent(encodedBallId));
+}
+
+async function toggleCatalogBallDetail(ballId) {
+  try {
+    if (activeCatalogBallDetailId === ballId) {
+      removeActiveCatalogBallDetail();
+      return;
+    }
+
+    removeActiveCatalogBallDetail();
+
+    const sourceRow = document.querySelector(
+      `tr.listing-row[data-catalog-ball-id="${CSS.escape(ballId)}"]`
+    );
+
+    if (!sourceRow) {
+      throw new Error("Could not find catalog ball row.");
+    }
+
+    activeCatalogBallDetailId = ballId;
+
+    const detailRow = document.createElement("tr");
+    detailRow.className = "catalog-ball-detail-row";
+    detailRow.innerHTML = `
+      <td colspan="6">
+        <div class="inline-detail">Loading catalog ball detail...</div>
+      </td>
+    `;
+
+    sourceRow.insertAdjacentElement("afterend", detailRow);
+
+    const data = await apiGet(
+      `/api/admin/catalog-balls/detail?id=${encodeURIComponent(ballId)}`
+    );
+
+    detailRow.querySelector(".inline-detail").textContent = JSON.stringify(
+      data,
+      null,
+      2
+    );
+  } catch (error) {
+    setStatus("Error", "error");
+
+    const detail = document.querySelector(".catalog-ball-detail-row .inline-detail");
+
+    if (detail) {
+      detail.textContent = JSON.stringify({ error: error.message }, null, 2);
+    }
+  }
+}
+
 async function loadSkippedReviews() {
   try {
     const query = encodeQuery({
@@ -1369,6 +1708,67 @@ async function toggleListingDetail(listingId) {
   }
 }
 
+
+function setupEnterKeyRefreshes() {
+  const bindings = [
+    {
+      inputIds: [
+        "catalogBallSearch",
+        "catalogBallBrandFilter",
+        "catalogBallManufacturerFilter",
+        "catalogBallLimit",
+      ],
+      buttonId: "loadCatalogBallsBtn",
+    },
+    {
+      inputIds: [
+        "listingSearch",
+        "listingRetailerName",
+        "listingLimit",
+      ],
+      buttonId: "loadListingsBtn",
+    },
+    {
+      inputIds: [
+        "trackedRetailerNameFilter",
+      ],
+      buttonId: "loadTrackedSourcesBtn",
+    },
+    {
+      inputIds: [
+        "candidateListingUrl",
+      ],
+      buttonId: "previewCandidatesBtn",
+    },
+  ];
+
+  bindings.forEach((binding) => {
+    const button = document.getElementById(binding.buttonId);
+
+    if (!button) {
+      return;
+    }
+
+    binding.inputIds.forEach((inputId) => {
+      const input = document.getElementById(inputId);
+
+      if (!input) {
+        return;
+      }
+
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
+
+        event.preventDefault();
+        button.click();
+      });
+    });
+  });
+}
+
+setupEnterKeyRefreshes();
 setupInfoButtons();
 setupNavJumps();
 setupScrapeOutputModal();
@@ -1394,6 +1794,14 @@ document
 document
   .getElementById("seedTrackedSourcesBtn")
   .addEventListener("click", seedTrackedSources);
+
+document
+  .getElementById("loadCatalogBallsBtn")
+  .addEventListener("click", loadCatalogBalls);
+
+document
+  .getElementById("newCatalogBallBtn")
+  .addEventListener("click", openNewCatalogBallModal);
 
 document
   .getElementById("loadSkippedBtn")
@@ -1430,5 +1838,6 @@ document.getElementById("loadManualListingsBtn").addEventListener("click", () =>
 
 loadDashboardSummary();
 loadTrackedSources();
+loadCatalogBalls();
 loadSkippedReviews();
 loadListings();
