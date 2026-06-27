@@ -22,6 +22,18 @@ function assertBowlingComUrl(url: string) {
   }
 }
 
+function assertBowlingComCategoryUrl(url: string) {
+  const parsedUrl = new URL(url);
+
+  if (!BOWLING_COM_HOSTS.has(parsedUrl.hostname)) {
+    throw new Error(`URL is not a Bowling.com URL: ${parsedUrl.hostname}`);
+  }
+
+  if (!parsedUrl.pathname.startsWith("/shopping/")) {
+    throw new Error("Bowling.com category URL must be a shopping page URL.");
+  }
+}
+
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -226,4 +238,225 @@ export async function scrapeBowlingComProductPage(url: string) {
   });
 
   return parseBowlingComProductHtml(url, response.data);
+}
+
+export interface BowlingComCategoryProductCandidate {
+  name: string;
+  url: string;
+  brand: string | null;
+  imageUrl: string | null;
+  currentPrice: number | null;
+  source: "json_ld_collection" | "product_link_candidate";
+}
+
+function getNestedRecord(value: JsonRecord, key: string) {
+  const nested = value[key];
+
+  return isRecord(nested) ? nested : null;
+}
+
+function getNestedArray(value: JsonRecord, key: string) {
+  const nested = value[key];
+
+  return Array.isArray(nested) ? nested : [];
+}
+
+function findCollectionPageJsonLd($: cheerio.CheerioAPI) {
+  const blocks = parseJsonLdBlocks($);
+
+  return blocks.find((block) => {
+    return getJsonLdType(block)?.toLowerCase().includes("collectionpage");
+  });
+}
+
+function normalizeAbsoluteUrl(url: string, baseUrl: string) {
+  try {
+    return new URL(url, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+function parseBrandName(value: unknown) {
+  if (typeof value === "string") {
+    return value.trim() || null;
+  }
+
+  if (isRecord(value)) {
+    return getString(value.name);
+  }
+
+  return null;
+}
+
+function parseOfferPriceFromProduct(product: JsonRecord) {
+  const offers = normalizeOffers(product.offers);
+  const bestOffer = getBestOffer(offers);
+
+  return bestOffer?.price ?? null;
+}
+
+function parseCategoryProductsFromJsonLd(
+  url: string,
+  collectionPage: JsonRecord
+): BowlingComCategoryProductCandidate[] {
+  const mainEntity = getNestedRecord(collectionPage, "mainEntity");
+
+  if (!mainEntity) {
+    return [];
+  }
+
+  const itemListElement = getNestedArray(mainEntity, "itemListElement");
+  const products: BowlingComCategoryProductCandidate[] = [];
+
+  for (const listItem of itemListElement) {
+    if (!isRecord(listItem)) {
+      continue;
+    }
+
+    const product = getNestedRecord(listItem, "item");
+
+    if (!product) {
+      continue;
+    }
+
+    const name = getString(product.name);
+    const rawUrl = getString(product.url);
+
+    if (!name || !rawUrl) {
+      continue;
+    }
+
+    const productUrl = normalizeAbsoluteUrl(rawUrl, url);
+
+    if (!productUrl) {
+      continue;
+    }
+
+    products.push({
+      name,
+      url: productUrl,
+      brand: parseBrandName(product.brand),
+      imageUrl: getString(product.image),
+      currentPrice: parseOfferPriceFromProduct(product),
+      source: "json_ld_collection",
+    });
+  }
+
+  return products;
+}
+
+function parseCategoryProductsFromLinks(
+  url: string,
+  $: cheerio.CheerioAPI
+): BowlingComCategoryProductCandidate[] {
+  const products: BowlingComCategoryProductCandidate[] = [];
+
+  $('a[href*="/products/"]').each((_index, element) => {
+    const href = $(element).attr("href");
+    const productUrl = href ? normalizeAbsoluteUrl(href, url) : null;
+
+    if (!productUrl) {
+      return;
+    }
+
+    const text = cleanText($(element).text());
+
+    if (!text || text.length < 3) {
+      return;
+    }
+
+    const nameWithoutPrices = cleanText(
+      text
+        .replace(/SALE:/gi, "")
+        .replace(/\$\s?\d+(?:,\d{3})*(?:\.\d{2})?/g, "")
+        .replace(/\bInstant Bonus\b/gi, "")
+        .replace(/\bPre-Order\b/gi, "")
+        .replace(/\bCloseout\b/gi, "")
+    );
+
+    if (!nameWithoutPrices) {
+      return;
+    }
+
+    products.push({
+      name: nameWithoutPrices,
+      url: productUrl,
+      brand: null,
+      imageUrl: null,
+      currentPrice: null,
+      source: "product_link_candidate",
+    });
+  });
+
+  return products;
+}
+
+function dedupeCategoryProducts(
+  products: BowlingComCategoryProductCandidate[]
+) {
+  const byUrl = new Map<string, BowlingComCategoryProductCandidate>();
+
+  for (const product of products) {
+    const existing = byUrl.get(product.url);
+
+    if (!existing) {
+      byUrl.set(product.url, product);
+      continue;
+    }
+
+    if (
+      existing.source === "product_link_candidate" &&
+      product.source === "json_ld_collection"
+    ) {
+      byUrl.set(product.url, product);
+    }
+  }
+
+  return Array.from(byUrl.values());
+}
+
+export function parseBowlingComCategoryHtml(url: string, html: string) {
+  assertBowlingComCategoryUrl(url);
+
+  const $ = cheerio.load(html);
+  const collectionPage = findCollectionPageJsonLd($);
+
+  const jsonLdProducts = collectionPage
+    ? parseCategoryProductsFromJsonLd(url, collectionPage)
+    : [];
+
+  const linkProducts =
+    jsonLdProducts.length > 0 ? [] : parseCategoryProductsFromLinks(url, $);
+
+  const products = dedupeCategoryProducts([
+    ...jsonLdProducts,
+    ...linkProducts,
+  ]);
+
+  return {
+    sourceName: "bowling.com",
+    sourceUrl: url,
+    checkedAt: new Date().toISOString(),
+    title: cleanText($("title").first().text()) || null,
+    count: products.length,
+    sourceStrategy:
+      jsonLdProducts.length > 0 ? "json_ld_collection" : "product_links",
+    data: products,
+  };
+}
+
+export async function scrapeBowlingComCategoryPage(url: string) {
+  assertBowlingComCategoryUrl(url);
+
+  const response = await axios.get(url, {
+    headers: {
+      "User-Agent":
+        "BowlingBallSeeker/0.1.0 (+https://github.com/kev-lewis/bowling-ball-seeker)",
+      Accept: "text/html,application/xhtml+xml",
+    },
+    timeout: 15000,
+  });
+
+  return parseBowlingComCategoryHtml(url, response.data);
 }
