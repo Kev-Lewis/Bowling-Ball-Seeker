@@ -20,6 +20,7 @@ export interface RetailerListingInput {
   currentPrice: number;
   stockStatus: StockStatus;
   checkedAt?: Date;
+  recordUnchangedSnapshot?: boolean;
 }
 
 function normalizeUrl(url: string) {
@@ -59,6 +60,17 @@ export async function upsertRetailerListingWithSnapshot(
       },
     });
 
+    const latestSnapshot = existingListing
+      ? await tx.priceSnapshot.findFirst({
+          where: {
+            retailerListingId: listingId,
+          },
+          orderBy: {
+            checkedAt: "desc",
+          },
+        })
+      : null;
+
     const listing = existingListing
       ? await tx.retailerListing.update({
           where: {
@@ -95,6 +107,27 @@ export async function upsertRetailerListingWithSnapshot(
           },
         });
 
+    const priceChanged =
+      !latestSnapshot || latestSnapshot.price !== input.currentPrice;
+
+    const stockChanged =
+      !latestSnapshot || latestSnapshot.stockStatus !== input.stockStatus;
+
+    const shouldCreateSnapshot =
+      !existingListing ||
+      priceChanged ||
+      stockChanged ||
+      input.recordUnchangedSnapshot === true;
+
+    if (!shouldCreateSnapshot) {
+      return {
+        action: existingListing ? "updated" : "created",
+        snapshotAction: "skipped_unchanged",
+        listing,
+        priceSnapshot: null,
+      };
+    }
+
     const priceSnapshot = await tx.priceSnapshot.create({
       data: {
         id: randomUUID(),
@@ -107,6 +140,7 @@ export async function upsertRetailerListingWithSnapshot(
 
     return {
       action: existingListing ? "updated" : "created",
+      snapshotAction: "created",
       listing,
       priceSnapshot,
     };
