@@ -3,10 +3,16 @@ import {
   runPriceAlertJob,
   type PriceAlertJobOptions,
 } from "./priceAlertJob";
+import {
+  runMockRetailerScrapeJob,
+  type RetailerScrapeJobOptions,
+} from "./retailerScrapeJob";
 
 export interface DailySystemJobOptions {
   runManufacturerSync?: boolean;
+  runRetailerScrape?: boolean;
   runPriceAlerts?: boolean;
+  retailerScrapeOptions?: RetailerScrapeJobOptions;
   priceAlertOptions?: PriceAlertJobOptions;
 }
 
@@ -14,6 +20,7 @@ export async function runDailySystemJob(options: DailySystemJobOptions = {}) {
   const startedAt = new Date().toISOString();
 
   const runManufacturerSyncStep = options.runManufacturerSync ?? true;
+  const runRetailerScrapeStep = options.runRetailerScrape ?? true;
   const runPriceAlertsStep = options.runPriceAlerts ?? true;
 
   const steps = [];
@@ -56,6 +63,48 @@ export async function runDailySystemJob(options: DailySystemJobOptions = {}) {
 
     steps.push({
       name: "manufacturer_sync",
+      status: "skipped",
+    });
+  }
+
+  if (runRetailerScrapeStep) {
+    try {
+      const retailerScrape = await runMockRetailerScrapeJob({
+        allowLikelyMatch:
+          options.retailerScrapeOptions?.allowLikelyMatch ?? true,
+        minConfidence: options.retailerScrapeOptions?.minConfidence ?? 35,
+      });
+
+      const status =
+        retailerScrape.skippedNoMatchCount > 0 ||
+        retailerScrape.skippedNeedsReviewCount > 0
+          ? "partial_success"
+          : "success";
+
+      successfulStepCount += 1;
+
+      steps.push({
+        name: "retailer_scrape",
+        status,
+        data: retailerScrape,
+      });
+    } catch (error) {
+      failedStepCount += 1;
+
+      steps.push({
+        name: "retailer_scrape",
+        status: "failed",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unknown retailer scrape error",
+      });
+    }
+  } else {
+    skippedStepCount += 1;
+
+    steps.push({
+      name: "retailer_scrape",
       status: "skipped",
     });
   }

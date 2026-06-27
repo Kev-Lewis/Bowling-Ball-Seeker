@@ -60,7 +60,12 @@ async function runScheduledDailyJob() {
   try {
     const result = await runDailySystemJob({
       runManufacturerSync: true,
-      runPriceAlerts: true,
+  runRetailerScrape: true,
+  runPriceAlerts: true,
+  retailerScrapeOptions: {
+    allowLikelyMatch: true,
+    minConfidence: 35,
+  },
       priceAlertOptions: {
         days: 7,
         limit: 20,

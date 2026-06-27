@@ -141,20 +141,37 @@ jobRoutes.get("/daily/run", async (req, res) => {
       "daily-local"
     );
 
+    const runRetailerScrape = getBooleanQuery(
+  req.query.runRetailerScrape,
+  true
+);
+
+const allowLikelyMatch = getBooleanQuery(
+  req.query.allowLikelyMatch,
+  true
+);
+
+const minConfidence = getNumberQuery(req.query.minConfidence, 35);
+
     const result = await runDailySystemJob({
-      runManufacturerSync,
-      runPriceAlerts,
-      priceAlertOptions: {
-        days,
-        limit,
-        minPriceDrop,
-        minPercentDrop,
-        includeStockChanges,
-        inStockOnly,
-        destinationType,
-        destinationId,
-      },
-    });
+  runManufacturerSync,
+  runRetailerScrape,
+  runPriceAlerts,
+  retailerScrapeOptions: {
+    allowLikelyMatch,
+    minConfidence,
+  },
+  priceAlertOptions: {
+    days,
+    limit,
+    minPriceDrop,
+    minPercentDrop,
+    includeStockChanges,
+    inStockOnly,
+    destinationType,
+    destinationId,
+  },
+});
 
     return res.json({
       data: result,
