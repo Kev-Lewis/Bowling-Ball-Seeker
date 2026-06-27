@@ -99,6 +99,14 @@ function buildAlertMessage(alertType: PriceAlertType, change: RecentPriceChange)
   return `${ballName} is back in stock at ${retailerName} for ${latestPrice}.`;
 }
 
+function buildAlertDedupeKey(alertType: PriceAlertType, change: RecentPriceChange) {
+  return [
+    alertType,
+    change.listing.id,
+    new Date(change.latest.checkedAt).toISOString(),
+  ].join(":");
+}
+
 export async function getPriceAlertPreview(options: PriceAlertPreviewOptions = {}) {
   const days = options.days ?? 7;
   const limit = options.limit ?? 20;
@@ -138,17 +146,18 @@ export async function getPriceAlertPreview(options: PriceAlertPreviewOptions = {
       }
 
       return {
-        alertType,
-        message: buildAlertMessage(alertType, change),
-        ball: change.ball,
-        listing: change.listing,
-        previous: change.previous,
-        latest: change.latest,
-        priceDelta: change.priceDelta,
-        absolutePriceDrop: isPriceDrop ? absoluteDrop : 0,
-        percentChange: change.percentChange,
-        stockChanged: change.stockChanged,
-      };
+  dedupeKey: buildAlertDedupeKey(alertType, change),
+  alertType,
+  message: buildAlertMessage(alertType, change),
+  ball: change.ball,
+  listing: change.listing,
+  previous: change.previous,
+  latest: change.latest,
+  priceDelta: change.priceDelta,
+  absolutePriceDrop: isPriceDrop ? absoluteDrop : 0,
+  percentChange: change.percentChange,
+  stockChanged: change.stockChanged,
+};
     })
     .filter((alert) => {
       return alert !== null;
