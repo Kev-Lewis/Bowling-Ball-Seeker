@@ -1,6 +1,11 @@
 import { scrapeMockRetailerListings } from "../scrapers/retailers/mockRetailerScraper";
 import { matchRetailerListingTitle } from "../services/listingMatchService";
 import { upsertRetailerListingWithSnapshot } from "../services/retailerListingService";
+import {
+  completeScrapeRun,
+  failScrapeRun,
+  startScrapeRun,
+} from "../services/scrapeRunService";
 import type { ScrapedRetailerListing } from "../types/retailerScraper";
 
 export interface RetailerScrapeJobOptions {
@@ -69,33 +74,108 @@ export async function runMockRetailerScrapeJob(
   options: RetailerScrapeJobOptions = {}
 ) {
   const startedAt = new Date().toISOString();
-  const scrapeResult = await scrapeMockRetailerListings();
 
-  const results = [];
+  const scrapeRun = await startScrapeRun({
+    sourceName: "Mock Retailer",
+    sourceType: "retailer_price_scrape",
+    metadata: {
+      mode: "mock",
+      allowLikelyMatch: options.allowLikelyMatch ?? false,
+      minConfidence: options.minConfidence ?? 35,
+    },
+  });
 
-  for (const listing of scrapeResult.data) {
-    const result = await processScrapedRetailerListing(listing, options);
-    results.push(result);
+  try {
+    const scrapeResult = await scrapeMockRetailerListings();
+
+    const results = [];
+
+    for (const listing of scrapeResult.data) {
+      const result = await processScrapedRetailerListing(listing, options);
+      results.push(result);
+    }
+
+    const savedCount = results.filter((result) => {
+      return result.status === "saved";
+    }).length;
+
+    const skippedNoMatchCount = results.filter((result) => {
+      return result.status === "skipped_no_match";
+    }).length;
+
+    const skippedNeedsReviewCount = results.filter((result) => {
+      return result.status === "skipped_needs_review";
+    }).length;
+
+    const createdListingCount = results.filter((result) => {
+      return result.status === "saved" && result.upsert?.action === "created";
+    }).length;
+
+    const updatedListingCount = results.filter((result) => {
+      return result.status === "saved" && result.upsert?.action === "updated";
+    }).length;
+
+    const snapshotCreatedCount = results.filter((result) => {
+      return (
+        result.status === "saved" &&
+        result.upsert?.snapshotAction === "created"
+      );
+    }).length;
+
+    const snapshotSkippedCount = results.filter((result) => {
+      return (
+        result.status === "saved" &&
+        result.upsert?.snapshotAction === "skipped_unchanged"
+      );
+    }).length;
+
+    const jobResult = {
+      jobName: "mock_retailer_scrape_job",
+      scrapeRunId: scrapeRun.id,
+      sourceName: scrapeResult.sourceName,
+      sourceUrl: scrapeResult.sourceUrl,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      scrapedCount: scrapeResult.count,
+      savedCount,
+      skippedNoMatchCount,
+      skippedNeedsReviewCount,
+      createdListingCount,
+      updatedListingCount,
+      snapshotCreatedCount,
+      snapshotSkippedCount,
+      results,
+    };
+
+    await completeScrapeRun(scrapeRun.id, {
+      itemsFound: scrapeResult.count,
+      itemsCreated: createdListingCount + snapshotCreatedCount,
+      itemsUpdated: updatedListingCount,
+      itemsRemoved: 0,
+      metadata: {
+        mode: "mock",
+        sourceUrl: scrapeResult.sourceUrl,
+        savedCount,
+        skippedNoMatchCount,
+        skippedNeedsReviewCount,
+        createdListingCount,
+        updatedListingCount,
+        snapshotCreatedCount,
+        snapshotSkippedCount,
+      },
+    });
+
+    return jobResult;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown retailer scrape error";
+
+    await failScrapeRun(scrapeRun.id, message, {
+      mode: "mock",
+      allowLikelyMatch: options.allowLikelyMatch ?? false,
+      minConfidence: options.minConfidence ?? 35,
+    });
+
+    throw error;
   }
-
-  const savedCount = results.filter((result) => result.status === "saved").length;
-  const skippedNoMatchCount = results.filter((result) => {
-    return result.status === "skipped_no_match";
-  }).length;
-  const skippedNeedsReviewCount = results.filter((result) => {
-    return result.status === "skipped_needs_review";
-  }).length;
-
-  return {
-    jobName: "mock_retailer_scrape_job",
-    sourceName: scrapeResult.sourceName,
-    sourceUrl: scrapeResult.sourceUrl,
-    startedAt,
-    finishedAt: new Date().toISOString(),
-    scrapedCount: scrapeResult.count,
-    savedCount,
-    skippedNoMatchCount,
-    skippedNeedsReviewCount,
-    results,
-  };
 }

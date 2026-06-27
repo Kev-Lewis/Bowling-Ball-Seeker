@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getManufacturerCatalogSyncStatus,
+  getRetailerPriceScrapeStatus,
   getRecentScrapeRuns,
   getLatestScrapeRunForSource,
   getLatestScrapeRunsBySource,
@@ -69,6 +70,22 @@ scrapeRunRoutes.get("/manufacturer-sync-status", async (_req, res) => {
 
     return res.status(500).json({
       error: "Failed to fetch manufacturer sync status",
+    });
+  }
+});
+
+scrapeRunRoutes.get("/retailer-scrape-status", async (_req, res) => {
+  try {
+    const status = await getRetailerPriceScrapeStatus();
+
+    return res.json({
+      data: status,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Failed to fetch retailer scrape status",
     });
   }
 });

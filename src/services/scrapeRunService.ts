@@ -166,3 +166,27 @@ export async function getManufacturerCatalogSyncStatus() {
     generatedAt: new Date().toISOString(),
   };
 }
+
+export async function getRetailerPriceScrapeStatus() {
+  const latestRuns = await getLatestScrapeRunsBySource(
+    "retailer_price_scrape"
+  );
+
+  return {
+    sourceType: "retailer_price_scrape",
+    count: latestRuns.length,
+    data: latestRuns.map((run) => ({
+      sourceName: run.sourceName,
+      status: run.status,
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      itemsFound: run.itemsFound,
+      itemsCreated: run.itemsCreated,
+      itemsUpdated: run.itemsUpdated,
+      itemsRemoved: run.itemsRemoved,
+      errorMessage: run.errorMessage,
+      metadataJson: run.metadataJson,
+    })),
+    generatedAt: new Date().toISOString(),
+  };
+}
