@@ -2453,3 +2453,86 @@ loadListings();
     });
   };
 })();
+
+(function setupRunAllManufacturerSourcesV1() {
+  if (window.__runAllManufacturerSourcesV1) return;
+  window.__runAllManufacturerSourcesV1 = true;
+
+  function el(id) {
+    return document.getElementById(id);
+  }
+
+  function setManufacturerSummary(message) {
+    const summary = el("manufacturerSourcesSummary");
+    if (summary) summary.textContent = message;
+  }
+
+  window.runAllManufacturerSources = async function () {
+    try {
+      if (typeof setStatus === "function") {
+        setStatus("Running all manufacturer sources", "loading");
+      }
+
+      setManufacturerSummary("Running all enabled manufacturer sources...");
+
+      const response = await fetch("/api/tracked-manufacturer-sources/run-all");
+      const json = await response.json();
+
+      if (!response.ok) {
+        throw new Error(json.details || json.error || "Run all failed");
+      }
+
+      const data = json.data;
+      const totals = data.results.reduce(
+        (acc, item) => {
+          const result = item.result ?? {};
+
+          acc.discovered += result.discoveredCount ?? result.itemsFound ?? 0;
+          acc.parsed += result.parsedCount ?? 0;
+          acc.created += result.itemsCreated ?? 0;
+          acc.updated += result.itemsUpdated ?? 0;
+          acc.removed += result.itemsRemoved ?? 0;
+          acc.failures += result.failureCount ?? 0;
+
+          return acc;
+        },
+        {
+          discovered: 0,
+          parsed: 0,
+          created: 0,
+          updated: 0,
+          removed: 0,
+          failures: 0,
+        }
+      );
+
+      setManufacturerSummary(
+        `Run all complete. Sources ${data.sourceCount}, successful ${data.successfulCount}, failed ${data.failedCount}. Discovered ${totals.discovered}, parsed ${totals.parsed}, created ${totals.created}, updated ${totals.updated}, removed ${totals.removed}, parse failures ${totals.failures}.`
+      );
+
+      if (typeof loadCatalogBalls === "function") {
+        await loadCatalogBalls();
+      }
+
+      if (typeof setStatus === "function") {
+        setStatus("Run all manufacturer sources complete", "ready");
+      }
+    } catch (error) {
+      setManufacturerSummary(`Run all manufacturer sources error: ${error.message}`);
+
+      if (typeof setStatus === "function") {
+        setStatus("Error", "error");
+      }
+    }
+  };
+
+  const button = el("runAllManufacturerSourcesBtn");
+
+  if (button && button.dataset.runAllBound !== "true") {
+    button.dataset.runAllBound = "true";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      window.runAllManufacturerSources();
+    });
+  }
+})();

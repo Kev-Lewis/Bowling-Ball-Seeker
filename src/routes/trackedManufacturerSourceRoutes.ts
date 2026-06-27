@@ -158,3 +158,73 @@ trackedManufacturerSourceRoutes.get("/run", async (req, res) => {
     });
   }
 });
+
+trackedManufacturerSourceRoutes.get("/run-all", async (_req, res) => {
+  try {
+    const sources = await prisma.trackedManufacturerSource.findMany({
+      where: {
+        enabled: true,
+      },
+      orderBy: [
+        {
+          manufacturerName: "asc",
+        },
+        {
+          brandName: "asc",
+        },
+        {
+          name: "asc",
+        },
+      ],
+    });
+
+    const results = [];
+
+    for (const source of sources) {
+      if (source.parserKey !== "motiv") {
+        results.push({
+          source,
+          result: {
+            sourceName: source.manufacturerName,
+            status: "failed",
+            error: `No runner is wired for parserKey: ${source.parserKey}`,
+          },
+        });
+
+        continue;
+      }
+
+      const result = await runMotivManufacturerSync({
+        sourceUrl: source.url,
+      });
+
+      results.push({
+        source,
+        result,
+      });
+    }
+
+    const successfulCount = results.filter((item) => {
+      return item.result.status === "success";
+    }).length;
+
+    const failedCount = results.filter((item) => {
+      return item.result.status === "failed";
+    }).length;
+
+    res.json({
+      data: {
+        sourceCount: sources.length,
+        successfulCount,
+        failedCount,
+        results,
+        generatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to run enabled tracked manufacturer sources.",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});

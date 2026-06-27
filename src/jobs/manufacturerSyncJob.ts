@@ -1,3 +1,4 @@
+import { prisma } from "../db/prisma";
 import { scrapeMotivManufacturerCatalog } from "../scrapers/manufacturers/motivScraper";
 import {
   completeScrapeRun,
@@ -108,6 +109,64 @@ export async function runMotivManufacturerSync(
       error: message,
     };
   }
+}
+
+export async function runTrackedManufacturerSourceSync(source: {
+  id: string;
+  name: string;
+  manufacturerName: string;
+  parserKey: string;
+  url: string;
+}): Promise<ManufacturerSyncJobResult> {
+  if (source.parserKey === "motiv") {
+    return runMotivManufacturerSync({
+      sourceUrl: source.url,
+    });
+  }
+
+  return {
+    sourceName: source.manufacturerName,
+    status: "failed",
+    scrapeRunId: "unsupported-parser",
+    error: `No runner is wired for parserKey: ${source.parserKey}`,
+    details: {
+      sourceId: source.id,
+      sourceName: source.name,
+      parserKey: source.parserKey,
+    },
+  };
+}
+
+export async function runEnabledTrackedManufacturerSources() {
+  const sources = await prisma.trackedManufacturerSource.findMany({
+    where: {
+      enabled: true,
+    },
+    orderBy: [
+      {
+        manufacturerName: "asc",
+      },
+      {
+        brandName: "asc",
+      },
+      {
+        name: "asc",
+      },
+    ],
+  });
+
+  const results = [];
+
+  for (const source of sources) {
+    const result = await runTrackedManufacturerSourceSync(source);
+
+    results.push({
+      source,
+      result,
+    });
+  }
+
+  return results;
 }
 
 export async function runDailyManufacturerSync() {
