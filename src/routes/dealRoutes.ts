@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getCurrentDeals } from "../services/dealService";
+import { getBestCurrentDealsByBall, getCurrentDeals } from "../services/dealService";
 
 export const dealRoutes = Router();
 
@@ -32,6 +32,40 @@ function getOptionalStringQuery(value: unknown) {
 
   return parsed || undefined;
 }
+
+dealRoutes.get("/best-by-ball", async (req, res) => {
+  try {
+    const limit = getNumberQuery(req.query.limit, 25);
+    const brand = getOptionalStringQuery(req.query.brand);
+    const retailerType = getOptionalStringQuery(req.query.retailerType);
+    const minMatchConfidence = getNumberQuery(req.query.minMatchConfidence, 0);
+    const verifiedOnly = getBooleanQuery(req.query.verifiedOnly, false);
+    const inStockOnly = getBooleanQuery(req.query.inStockOnly, true);
+
+    const result = await getBestCurrentDealsByBall({
+      limit,
+      brand,
+      retailerType,
+      minMatchConfidence,
+      verifiedOnly,
+      inStockOnly,
+    });
+
+    return res.json({
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+
+    const message =
+      error instanceof Error ? error.message : "Unknown best deals error";
+
+    return res.status(500).json({
+      error: "Failed to fetch best current deals by ball",
+      details: message,
+    });
+  }
+});
 
 dealRoutes.get("/", async (req, res) => {
   try {

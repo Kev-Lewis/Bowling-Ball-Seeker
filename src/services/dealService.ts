@@ -101,3 +101,81 @@ export async function getCurrentDeals(options: DealSearchOptions = {}) {
     generatedAt: new Date().toISOString(),
   };
 }
+
+export async function getBestCurrentDealsByBall(
+  options: DealSearchOptions = {}
+) {
+  const limit = options.limit ?? 25;
+  const minMatchConfidence = options.minMatchConfidence ?? 0;
+  const inStockOnly = options.inStockOnly ?? true;
+  const verifiedOnly = options.verifiedOnly ?? false;
+
+  const listings = await prisma.retailerListing.findMany({
+    where: {
+      ...(inStockOnly
+        ? {
+            stockStatus: "in_stock",
+          }
+        : {}),
+      ...(verifiedOnly
+        ? {
+            retailerType: "verified_retailer",
+          }
+        : {}),
+      ...(options.retailerType
+        ? {
+            retailerType: options.retailerType,
+          }
+        : {}),
+      matchConfidence: {
+        gte: minMatchConfidence,
+      },
+      ball: {
+        isCurrent: true,
+        ...(options.brand
+          ? {
+              brand: {
+                contains: options.brand,
+              },
+            }
+          : {}),
+      },
+    },
+    include: {
+      ball: true,
+    },
+    orderBy: [
+      {
+        currentPrice: "asc",
+      },
+      {
+        lastCheckedAt: "desc",
+      },
+    ],
+  });
+
+  const bestListingByBall = new Map<string, (typeof listings)[number]>();
+
+  for (const listing of listings) {
+    if (!bestListingByBall.has(listing.ballId)) {
+      bestListingByBall.set(listing.ballId, listing);
+    }
+  }
+
+  const bestDeals = Array.from(bestListingByBall.values()).slice(0, limit);
+
+  return {
+    filters: {
+      limit,
+      brand: options.brand,
+      retailerType: options.retailerType,
+      minMatchConfidence,
+      verifiedOnly,
+      inStockOnly,
+    },
+    totalMatchingListings: listings.length,
+    count: bestDeals.length,
+    data: bestDeals.map(formatDealListing),
+    generatedAt: new Date().toISOString(),
+  };
+}
