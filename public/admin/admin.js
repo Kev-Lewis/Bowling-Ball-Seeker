@@ -5636,7 +5636,8 @@ loadListings();
             </div>
 
             <div class="review-queue-actions">
-              <button type="button" onclick="setRetailerReviewStatusV1('${escapeHtml(item.id)}', 'reviewed')">Reviewed</button>
+              <button type="button" onclick="openRetailerAssignExistingModalV1('${escapeHtml(item.id)}', '${escapeHtml(item.listingTitle)}')">Assign Existing Ball</button>
+              <button type="button" class="secondary" onclick="setRetailerReviewStatusV1('${escapeHtml(item.id)}', 'reviewed')">Mark Reviewed Only</button>
               <button type="button" class="secondary" onclick="setRetailerReviewStatusV1('${escapeHtml(item.id)}', 'retailer_only')">Retailer Only</button>
               <button type="button" class="secondary" onclick="setRetailerReviewStatusV1('${escapeHtml(item.id)}', 'ignored')">Ignore</button>
               <a class="button secondary" href="${escapeHtml(item.listingUrl)}" target="_blank" rel="noreferrer">Open Listing</a>
@@ -5966,4 +5967,1364 @@ loadListings();
   `;
 
   document.head.appendChild(style);
+})();
+
+/* Retailer review assignment modal */
+(function setupRetailerReviewAssignExistingV1() {
+  if (window.__retailerReviewAssignExistingV1) return;
+  window.__retailerReviewAssignExistingV1 = true;
+
+  let activeReviewItemId = "";
+  let activeReviewItemTitle = "";
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function ensureStyles() {
+    if (document.getElementById("retailerAssignExistingStylesV1")) return;
+
+    const style = document.createElement("style");
+    style.id = "retailerAssignExistingStylesV1";
+    style.textContent = `
+      .retailer-assign-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 12000;
+        background: rgba(15, 23, 42, 0.58);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .retailer-assign-backdrop.hidden {
+        display: none;
+      }
+
+      .retailer-assign-modal {
+        width: min(900px, 100%);
+        max-height: 90vh;
+        overflow: auto;
+        background: #ffffff;
+        color: #172033;
+        border: 1px solid #cbd5e1;
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+      }
+
+      .retailer-assign-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 22px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .retailer-assign-head h3 {
+        margin: 0;
+      }
+
+      .retailer-assign-body {
+        padding: 20px 22px;
+      }
+
+      .retailer-assign-search-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: end;
+      }
+
+      .retailer-assign-results {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .retailer-assign-ball-card {
+        border: 1px solid #dbe7f5;
+        border-radius: 14px;
+        padding: 12px;
+        background: #fbfdff;
+      }
+
+      .retailer-assign-ball-title {
+        font-weight: 800;
+        margin-bottom: 6px;
+      }
+
+      .retailer-assign-ball-meta {
+        color: #475569;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .retailer-assign-ball-actions {
+        margin-top: 10px;
+      }
+
+      .retailer-assign-note {
+        margin-bottom: 12px;
+        color: #64748b;
+        font-size: 13px;
+      }
+
+      @media (max-width: 720px) {
+        .retailer-assign-search-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function ensureModal() {
+    ensureStyles();
+
+    let modal = document.getElementById("retailerAssignExistingModalV1");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "retailerAssignExistingModalV1";
+    modal.className = "retailer-assign-backdrop hidden";
+    modal.innerHTML = `
+      <div class="retailer-assign-modal" role="dialog" aria-modal="true">
+        <div class="retailer-assign-head">
+          <h3>Assign Review Item to Existing Ball</h3>
+          <button type="button" class="secondary" id="retailerAssignCloseBtnV1">Close</button>
+        </div>
+
+        <div class="retailer-assign-body">
+          <div class="retailer-assign-note" id="retailerAssignNoteV1"></div>
+
+          <div class="retailer-assign-search-row">
+            <div>
+              <label for="retailerAssignSearchInputV1">Search Catalog Balls</label>
+              <input id="retailerAssignSearchInputV1" placeholder="Venom Shock, Jackal, Aspire..." />
+            </div>
+            <button type="button" id="retailerAssignSearchBtnV1">Search</button>
+          </div>
+
+          <div class="retailer-assign-results" id="retailerAssignResultsV1"></div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document
+      .getElementById("retailerAssignCloseBtnV1")
+      ?.addEventListener("click", closeAssignModal);
+
+    document
+      .getElementById("retailerAssignSearchBtnV1")
+      ?.addEventListener("click", searchAssignBalls);
+
+    document
+      .getElementById("retailerAssignSearchInputV1")
+      ?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          searchAssignBalls();
+        }
+      });
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        closeAssignModal();
+      }
+    });
+
+    return modal;
+  }
+
+  function closeAssignModal() {
+    ensureModal().classList.add("hidden");
+  }
+
+  function guessSearchFromTitle(title) {
+    return String(title ?? "")
+      .replace(/^motiv\s+/i, "")
+      .replace(/\b(green|teal|black|navy|yellow|purple|orange|lime|red|grey|gray|aqua|crimson|gold|blue|solid|pearl|spare|pixel)\b/gi, " ")
+      .replace(/[/-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  async function openAssignModal(reviewItemId, listingTitle) {
+    activeReviewItemId = reviewItemId;
+    activeReviewItemTitle = listingTitle;
+
+    ensureModal();
+
+    const note = document.getElementById("retailerAssignNoteV1");
+    const input = document.getElementById("retailerAssignSearchInputV1");
+    const results = document.getElementById("retailerAssignResultsV1");
+
+    if (note) {
+      note.textContent = `Assigning: ${listingTitle}`;
+    }
+
+    if (input) {
+      input.value = guessSearchFromTitle(listingTitle);
+    }
+
+    if (results) {
+      results.innerHTML = `<p class="muted">Search for the catalog ball to assign this listing to.</p>`;
+    }
+
+    ensureModal().classList.remove("hidden");
+    await searchAssignBalls();
+  }
+
+  async function searchAssignBalls() {
+    const input = document.getElementById("retailerAssignSearchInputV1");
+    const results = document.getElementById("retailerAssignResultsV1");
+
+    if (!results) return;
+
+    const q = input?.value?.trim() ?? "";
+
+    results.innerHTML = `<p class="muted">Searching...</p>`;
+
+    try {
+      const query = encodeQuery({
+        q,
+        limit: 25,
+      });
+
+      const response = await apiGet(`/api/retailer-review-items/catalog-ball-search?${query}`);
+      const items = response.data?.items ?? [];
+
+      if (items.length === 0) {
+        results.innerHTML = `<p class="muted">No catalog balls found.</p>`;
+        return;
+      }
+
+      results.innerHTML = items
+        .map((ball) => {
+          return `
+            <article class="retailer-assign-ball-card">
+              <div class="retailer-assign-ball-title">
+                ${escapeHtml(ball.brand)} ${escapeHtml(ball.canonicalName)}
+              </div>
+
+              <div class="retailer-assign-ball-meta">
+                <div><strong>Catalog:</strong> ${ball.isCurrent ? "current" : "legacy"}</div>
+                <div><strong>Cover:</strong> ${escapeHtml(ball.coverstockName ?? "—")} / ${escapeHtml(ball.coverstockType ?? "—")}</div>
+                <div><strong>Core:</strong> ${escapeHtml(ball.coreName ?? "—")} / ${escapeHtml(ball.coreType ?? "—")}</div>
+                <div><strong>ID:</strong> ${escapeHtml(ball.id)}</div>
+              </div>
+
+              <div class="retailer-assign-ball-actions">
+                <button type="button" onclick="assignRetailerReviewItemToBallV1('${escapeHtml(activeReviewItemId)}', '${escapeHtml(ball.id)}')">
+                  Assign This Ball
+                </button>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+    } catch (error) {
+      results.innerHTML = `<div class="review-queue-error">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  async function assignRetailerReviewItemToBall(reviewItemId, ballId) {
+    const confirmed = window.confirm(
+      `Assign "${activeReviewItemTitle}" to catalog ball "${ballId}"?`
+    );
+
+    if (!confirmed) return;
+
+    const query = encodeQuery({
+      reviewItemId,
+      ballId,
+    });
+
+    await apiGet(`/api/retailer-review-items/assign-existing?${query}`);
+
+    closeAssignModal();
+
+    if (typeof window.loadRetailerReviewQueueV1 === "function") {
+      await window.loadRetailerReviewQueueV1();
+    }
+
+    if (typeof loadListings === "function") {
+      await loadListings();
+    }
+  }
+
+  function injectAssignButtons() {
+    document.querySelectorAll("#retailerReviewQueueV1 .review-queue-card").forEach((card) => {
+      if (card.querySelector(".assign-existing-ball-btn")) return;
+
+      const reviewedButton = Array.from(card.querySelectorAll("button")).find((button) =>
+        button.getAttribute("onclick")?.includes("setRetailerReviewStatusV1")
+      );
+
+      const onclick = reviewedButton?.getAttribute("onclick") ?? "";
+      const idMatch = onclick.match(new RegExp("setRetailerReviewStatusV1\\\\('([^']+)'"));
+
+      if (!idMatch?.[1]) return;
+
+      const reviewItemId = idMatch[1];
+      const title = card.querySelector(".review-queue-title")?.textContent?.trim() ?? "";
+
+      const actions = card.querySelector(".review-queue-actions");
+      if (!actions) return;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary assign-existing-ball-btn";
+      button.textContent = "Assign Existing";
+      button.addEventListener("click", () => {
+        openAssignModal(reviewItemId, title);
+      });
+
+      actions.prepend(button);
+    });
+  }
+
+  window.openRetailerAssignExistingModalV1 = openAssignModal;
+  window.assignRetailerReviewItemToBallV1 = assignRetailerReviewItemToBall;
+
+  const oldLoad = window.loadRetailerReviewQueueV1;
+  window.loadRetailerReviewQueueV1 = async function loadRetailerReviewQueueWithAssignV1() {
+    if (oldLoad) {
+      await oldLoad();
+    }
+
+    setTimeout(injectAssignButtons, 0);
+    setTimeout(injectAssignButtons, 150);
+  };
+
+  document.addEventListener("click", () => {
+    setTimeout(injectAssignButtons, 0);
+  });
+
+  setInterval(injectAssignButtons, 1000);
+})();
+
+/* Review queue wording/assignment clarity */
+(function setupRetailerReviewQueueActionClarityV1() {
+  if (window.__retailerReviewQueueActionClarityV1) return;
+  window.__retailerReviewQueueActionClarityV1 = true;
+
+  function applyActionLabels() {
+    document.querySelectorAll("#retailerReviewQueueV1 .review-queue-card").forEach((card) => {
+      const buttons = Array.from(card.querySelectorAll("button"));
+
+      buttons.forEach((button) => {
+        const onclick = button.getAttribute("onclick") ?? "";
+
+        if (
+          onclick.includes("setRetailerReviewStatusV1") &&
+          onclick.includes("'reviewed'") &&
+          button.textContent?.trim() === "Reviewed"
+        ) {
+          button.textContent = "Mark Reviewed";
+          button.title = "Marks the review item as reviewed only. This does not create a retailer listing.";
+        }
+      });
+
+      const assignButton = card.querySelector(".assign-existing-ball-btn");
+      if (assignButton) {
+        assignButton.textContent = "Assign Existing Ball";
+        assignButton.title = "Creates/updates a retailer listing by assigning this review item to an existing catalog ball.";
+      }
+    });
+  }
+
+  document.addEventListener("click", () => {
+    setTimeout(applyActionLabels, 0);
+    setTimeout(applyActionLabels, 150);
+  });
+
+  setInterval(applyActionLabels, 1000);
+})();
+
+/* Fix assign-existing modal search response + safer review queue response handling */
+(function setupRetailerAssignAndQueueFixV2() {
+  if (window.__retailerAssignAndQueueFixV2) return;
+  window.__retailerAssignAndQueueFixV2 = true;
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function normalizeApiData(response) {
+    return response?.data ?? response ?? {};
+  }
+
+  function normalizeItemsResponse(response) {
+    const data = normalizeApiData(response);
+    return Array.isArray(data.items) ? data.items : [];
+  }
+
+  async function fixedSearchAssignBalls() {
+    const input = document.getElementById("retailerAssignSearchInputV1");
+    const results = document.getElementById("retailerAssignResultsV1");
+
+    if (!results) return;
+
+    const q = input?.value?.trim() ?? "";
+
+    results.innerHTML = `<p class="muted">Searching catalog balls...</p>`;
+
+    try {
+      const query = encodeQuery({
+        q,
+        limit: 25,
+      });
+
+      const response = await apiGet(`/api/retailer-review-items/catalog-ball-search?${query}`);
+      const items = normalizeItemsResponse(response);
+
+      if (items.length === 0) {
+        results.innerHTML = `
+          <p class="muted">
+            No catalog balls found for "${escapeHtml(q)}".
+          </p>
+          <p class="muted">
+            Try a shorter family search like <strong>Jackal</strong>, <strong>Venom</strong>, <strong>Primal</strong>, or leave the field blank.
+          </p>
+        `;
+        return;
+      }
+
+      results.innerHTML = items
+        .map((ball) => {
+          return `
+            <article class="retailer-assign-ball-card">
+              <div class="retailer-assign-ball-title">
+                ${escapeHtml(ball.brand)} ${escapeHtml(ball.canonicalName)}
+              </div>
+
+              <div class="retailer-assign-ball-meta">
+                <div><strong>Catalog:</strong> ${ball.isCurrent ? "current" : "legacy"}</div>
+                <div><strong>Cover:</strong> ${escapeHtml(ball.coverstockName ?? "—")} / ${escapeHtml(ball.coverstockType ?? "—")}</div>
+                <div><strong>Core:</strong> ${escapeHtml(ball.coreName ?? "—")} / ${escapeHtml(ball.coreType ?? "—")}</div>
+                <div><strong>ID:</strong> ${escapeHtml(ball.id)}</div>
+              </div>
+
+              <div class="retailer-assign-ball-actions">
+                <button type="button" onclick="assignRetailerReviewItemToBallV1('${escapeHtml(window.__activeReviewItemIdV2 ?? "")}', '${escapeHtml(ball.id)}')">
+                  Assign This Ball
+                </button>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+    } catch (error) {
+      results.innerHTML = `
+        <div class="review-queue-error">
+          Assign search failed: ${escapeHtml(error?.message ?? error)}
+        </div>
+      `;
+    }
+  }
+
+  async function fixedOpenAssignModal(reviewItemId, listingTitle) {
+    window.__activeReviewItemIdV2 = reviewItemId;
+    window.__activeReviewItemTitleV2 = listingTitle;
+
+    if (typeof openRetailerAssignExistingModalV1 === "function") {
+      await openRetailerAssignExistingModalV1(reviewItemId, listingTitle);
+    }
+
+    const input = document.getElementById("retailerAssignSearchInputV1");
+    const note = document.getElementById("retailerAssignNoteV1");
+
+    if (note) {
+      note.textContent = `Assigning: ${listingTitle}`;
+    }
+
+    if (input) {
+      const guessed = String(listingTitle ?? "")
+        .replace(/^motiv\s+/i, "")
+        .replace(/\b(green|teal|black|navy|yellow|purple|orange|lime|red|grey|gray|aqua|crimson|gold|blue|solid|pearl|spare|pixel)\b/gi, " ")
+        .replace(/[/-]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      input.value = guessed || listingTitle || "";
+    }
+
+    await fixedSearchAssignBalls();
+  }
+
+  async function fixedAssignRetailerReviewItemToBall(reviewItemId, ballId) {
+    const title = window.__activeReviewItemTitleV2 ?? "this review item";
+
+    const confirmed = window.confirm(
+      `Assign "${title}" to catalog ball "${ballId}" and create/update a retailer listing?`
+    );
+
+    if (!confirmed) return;
+
+    const query = encodeQuery({
+      reviewItemId,
+      ballId,
+    });
+
+    await apiGet(`/api/retailer-review-items/assign-existing?${query}`);
+
+    document.getElementById("retailerAssignExistingModalV1")?.classList.add("hidden");
+
+    if (typeof window.loadRetailerReviewQueueV1 === "function") {
+      await window.loadRetailerReviewQueueV1();
+    }
+
+    if (typeof loadListings === "function") {
+      await loadListings();
+    }
+  }
+
+  window.fixedSearchAssignBallsV2 = fixedSearchAssignBalls;
+  window.openRetailerAssignExistingModalV1 = fixedOpenAssignModal;
+  window.assignRetailerReviewItemToBallV1 = fixedAssignRetailerReviewItemToBall;
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const searchBtn = event.target?.closest?.("#retailerAssignSearchBtnV1");
+
+      if (searchBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        fixedSearchAssignBalls();
+      }
+    },
+    true
+  );
+
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (
+        event.target?.id === "retailerAssignSearchInputV1" &&
+        event.key === "Enter"
+      ) {
+        event.preventDefault();
+        fixedSearchAssignBalls();
+      }
+    },
+    true
+  );
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const assignButton = event.target?.closest?.(".assign-existing-ball-btn");
+
+      if (!assignButton) return;
+
+      const card = assignButton.closest(".review-queue-card");
+      const reviewedButton = Array.from(card?.querySelectorAll("button") ?? []).find((button) =>
+        button.getAttribute("onclick")?.includes("setRetailerReviewStatusV1")
+      );
+
+      const onclick = reviewedButton?.getAttribute("onclick") ?? "";
+      const idMatch = onclick.match(/setRetailerReviewStatusV1\('([^']+)'/);
+      const reviewItemId = idMatch?.[1] ?? "";
+      const title = card?.querySelector(".review-queue-title")?.textContent?.trim() ?? "";
+
+      if (!reviewItemId) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      fixedOpenAssignModal(reviewItemId, title);
+    },
+    true
+  );
+})();
+
+/* Assign Existing Ball V3: standalone non-recursive modal */
+(function setupRetailerAssignExistingStandaloneV3() {
+  if (window.__retailerAssignExistingStandaloneV3) return;
+  window.__retailerAssignExistingStandaloneV3 = true;
+
+  let activeReviewItemId = "";
+  let activeReviewItemTitle = "";
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function ensureStyles() {
+    if (document.getElementById("retailerAssignExistingStylesV3")) return;
+
+    const style = document.createElement("style");
+    style.id = "retailerAssignExistingStylesV3";
+    style.textContent = `
+      .retailer-assign-v3-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 14000;
+        background: rgba(15, 23, 42, 0.58);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .retailer-assign-v3-backdrop.hidden {
+        display: none;
+      }
+
+      .retailer-assign-v3-modal {
+        width: min(920px, 100%);
+        max-height: 90vh;
+        overflow: auto;
+        background: #ffffff;
+        color: #172033;
+        border: 1px solid #cbd5e1;
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+      }
+
+      .retailer-assign-v3-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 22px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .retailer-assign-v3-body {
+        padding: 20px 22px;
+      }
+
+      .retailer-assign-v3-search {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: end;
+      }
+
+      .retailer-assign-v3-results {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .retailer-assign-v3-card {
+        border: 1px solid #dbe7f5;
+        border-radius: 14px;
+        padding: 12px;
+        background: #fbfdff;
+      }
+
+      .retailer-assign-v3-title {
+        font-weight: 800;
+        margin-bottom: 6px;
+      }
+
+      .retailer-assign-v3-meta {
+        color: #475569;
+        font-size: 13px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+
+      .retailer-assign-v3-actions {
+        margin-top: 10px;
+      }
+
+      @media (max-width: 720px) {
+        .retailer-assign-v3-search {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function ensureModal() {
+    ensureStyles();
+
+    let modal = document.getElementById("retailerAssignExistingModalV3");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "retailerAssignExistingModalV3";
+    modal.className = "retailer-assign-v3-backdrop hidden";
+    modal.innerHTML = `
+      <div class="retailer-assign-v3-modal" role="dialog" aria-modal="true">
+        <div class="retailer-assign-v3-head">
+          <h3>Assign Review Item to Existing Ball</h3>
+          <button type="button" class="secondary" id="retailerAssignCloseBtnV3">Close</button>
+        </div>
+
+        <div class="retailer-assign-v3-body">
+          <p class="muted" id="retailerAssignNoteV3"></p>
+
+          <div class="retailer-assign-v3-search">
+            <div>
+              <label for="retailerAssignSearchInputV3">Search Catalog Balls</label>
+              <input id="retailerAssignSearchInputV3" placeholder="Jackal, Venom, Aspire..." />
+            </div>
+            <button type="button" id="retailerAssignSearchBtnV3">Search</button>
+          </div>
+
+          <div class="retailer-assign-v3-results" id="retailerAssignResultsV3"></div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("retailerAssignCloseBtnV3")?.addEventListener("click", closeAssignModalV3);
+    document.getElementById("retailerAssignSearchBtnV3")?.addEventListener("click", searchAssignBallsV3);
+
+    document.getElementById("retailerAssignSearchInputV3")?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        searchAssignBallsV3();
+      }
+    });
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        closeAssignModalV3();
+      }
+    });
+
+    return modal;
+  }
+
+  function closeAssignModalV3() {
+    ensureModal().classList.add("hidden");
+  }
+
+  function guessSearchFromTitle(title) {
+    return String(title ?? "")
+      .replace(/^motiv\s+/i, "")
+      .replace(/\b(green|teal|black|navy|yellow|purple|orange|lime|red|grey|gray|aqua|crimson|gold|blue|solid|pearl|spare|pixel)\b/gi, " ")
+      .replace(/[/-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  async function openAssignModalV3(reviewItemId, listingTitle) {
+    activeReviewItemId = reviewItemId;
+    activeReviewItemTitle = listingTitle;
+
+    const modal = ensureModal();
+    const note = document.getElementById("retailerAssignNoteV3");
+    const input = document.getElementById("retailerAssignSearchInputV3");
+    const results = document.getElementById("retailerAssignResultsV3");
+
+    if (note) note.textContent = `Assigning: ${listingTitle}`;
+    if (input) input.value = guessSearchFromTitle(listingTitle) || listingTitle || "";
+    if (results) results.innerHTML = `<p class="muted">Searching catalog balls...</p>`;
+
+    modal.classList.remove("hidden");
+    await searchAssignBallsV3();
+  }
+
+  async function searchAssignBallsV3() {
+    const input = document.getElementById("retailerAssignSearchInputV3");
+    const results = document.getElementById("retailerAssignResultsV3");
+    if (!results) return;
+
+    const q = input?.value?.trim() ?? "";
+    results.innerHTML = `<p class="muted">Searching catalog balls...</p>`;
+
+    try {
+      const query = encodeQuery({ q, limit: 25 });
+      const response = await apiGet(`/api/retailer-review-items/catalog-ball-search?${query}`);
+      const data = response?.data ?? response ?? {};
+      const items = Array.isArray(data.items) ? data.items : [];
+
+      if (items.length === 0) {
+        results.innerHTML = `
+          <p class="muted">No catalog balls found for "${escapeHtml(q)}".</p>
+          <p class="muted">Try a shorter search like Jackal, Venom, Primal, Aspire, or leave it blank.</p>
+        `;
+        return;
+      }
+
+      results.innerHTML = items.map((ball) => `
+        <article class="retailer-assign-v3-card">
+          <div class="retailer-assign-v3-title">${escapeHtml(ball.brand)} ${escapeHtml(ball.canonicalName)}</div>
+          <div class="retailer-assign-v3-meta">
+            <div><strong>Catalog:</strong> ${ball.isCurrent ? "current" : "legacy"}</div>
+            <div><strong>Cover:</strong> ${escapeHtml(ball.coverstockName ?? "—")} / ${escapeHtml(ball.coverstockType ?? "—")}</div>
+            <div><strong>Core:</strong> ${escapeHtml(ball.coreName ?? "—")} / ${escapeHtml(ball.coreType ?? "—")}</div>
+            <div><strong>ID:</strong> ${escapeHtml(ball.id)}</div>
+          </div>
+          <div class="retailer-assign-v3-actions">
+            <button type="button" onclick="assignRetailerReviewItemToBallV1('${escapeHtml(activeReviewItemId)}', '${escapeHtml(ball.id)}')">
+              Assign This Ball
+            </button>
+          </div>
+        </article>
+      `).join("");
+    } catch (error) {
+      results.innerHTML = `<div class="review-queue-error">Search failed: ${escapeHtml(error?.message ?? error)}</div>`;
+    }
+  }
+
+  async function assignRetailerReviewItemToBallV3(reviewItemId, ballId) {
+    const confirmed = window.confirm(
+      `Assign "${activeReviewItemTitle}" to "${ballId}" and create/update a retailer listing?`
+    );
+
+    if (!confirmed) return;
+
+    const query = encodeQuery({ reviewItemId, ballId });
+    await apiGet(`/api/retailer-review-items/assign-existing?${query}`);
+
+    closeAssignModalV3();
+
+    if (typeof window.loadRetailerReviewQueueV1 === "function") {
+      await window.loadRetailerReviewQueueV1();
+    }
+
+    if (typeof loadListings === "function") {
+      await loadListings();
+    }
+  }
+
+  window.openRetailerAssignExistingModalV1 = openAssignModalV3;
+  window.assignRetailerReviewItemToBallV1 = assignRetailerReviewItemToBallV3;
+  window.searchAssignBallsV3 = searchAssignBallsV3;
+})();
+
+/* Clarify Assign Existing wording: same exact SKU only */
+(function clarifyAssignExistingSameSkuV1() {
+  if (window.__clarifyAssignExistingSameSkuV1) return;
+  window.__clarifyAssignExistingSameSkuV1 = true;
+
+  function applyLabels() {
+    document.querySelectorAll("#retailerReviewQueueV1 .assign-existing-ball-btn").forEach((button) => {
+      button.textContent = "Assign Same Existing Ball";
+      button.title = "Use only when this retailer listing is the exact same SKU/ball as an existing catalog ball.";
+    });
+
+    document.querySelectorAll("#retailerReviewQueueV1 button").forEach((button) => {
+      if (button.textContent?.trim() === "Assign Existing Ball") {
+        button.textContent = "Assign Same Existing Ball";
+        button.title = "Use only when this retailer listing is the exact same SKU/ball as an existing catalog ball.";
+      }
+    });
+  }
+
+  document.addEventListener("click", () => {
+    setTimeout(applyLabels, 0);
+    setTimeout(applyLabels, 150);
+  });
+
+  setInterval(applyLabels, 1000);
+})();
+
+/* Create Separate Ball from retailer review item */
+(function setupCreateSeparateBallFromReviewV1() {
+  if (window.__createSeparateBallFromReviewV1) return;
+  window.__createSeparateBallFromReviewV1 = true;
+
+  let activeReviewItemId = "";
+  let activeListingTitle = "";
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function ensureStyles() {
+    if (document.getElementById("createSeparateBallStylesV1")) return;
+
+    const style = document.createElement("style");
+    style.id = "createSeparateBallStylesV1";
+    style.textContent = `
+      .create-separate-ball-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 15000;
+        background: rgba(15, 23, 42, 0.58);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .create-separate-ball-backdrop.hidden {
+        display: none;
+      }
+
+      .create-separate-ball-modal {
+        width: min(920px, 100%);
+        max-height: 90vh;
+        overflow: auto;
+        background: #ffffff;
+        color: #172033;
+        border: 1px solid #cbd5e1;
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+      }
+
+      .create-separate-ball-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 22px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .create-separate-ball-body {
+        padding: 20px 22px;
+      }
+
+      .create-separate-ball-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .create-separate-ball-wide {
+        grid-column: 1 / -1;
+      }
+
+      .create-separate-ball-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 16px 22px 22px;
+      }
+
+      .create-separate-ball-note {
+        color: #64748b;
+        font-size: 13px;
+        margin-bottom: 14px;
+      }
+
+      @media (max-width: 780px) {
+        .create-separate-ball-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .create-separate-ball-wide {
+          grid-column: auto;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function ensureModal() {
+    ensureStyles();
+
+    let modal = document.getElementById("createSeparateBallModalV1");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "createSeparateBallModalV1";
+    modal.className = "create-separate-ball-backdrop hidden";
+    modal.innerHTML = `
+      <div class="create-separate-ball-modal" role="dialog" aria-modal="true">
+        <div class="create-separate-ball-head">
+          <h3>Create Separate Ball</h3>
+          <button type="button" class="secondary" id="createSeparateBallCloseBtnV1">Close</button>
+        </div>
+
+        <div class="create-separate-ball-body">
+          <div class="create-separate-ball-note" id="createSeparateBallNoteV1"></div>
+
+          <div class="create-separate-ball-grid">
+            <div>
+              <label for="createSeparateBallCanonicalNameV1">Canonical Name</label>
+              <input id="createSeparateBallCanonicalNameV1" />
+            </div>
+
+            <div>
+              <label for="createSeparateBallBrandV1">Brand</label>
+              <input id="createSeparateBallBrandV1" />
+            </div>
+
+            <div>
+              <label for="createSeparateBallManufacturerV1">Manufacturer</label>
+              <input id="createSeparateBallManufacturerV1" />
+            </div>
+
+            <div>
+              <label for="createSeparateBallCoverstockNameV1">Coverstock Name</label>
+              <input id="createSeparateBallCoverstockNameV1" />
+            </div>
+
+            <div>
+              <label for="createSeparateBallCoverstockTypeV1">Coverstock Type</label>
+              <select id="createSeparateBallCoverstockTypeV1">
+                <option value="plastic">plastic</option>
+                <option value="solid">solid</option>
+                <option value="pearl">pearl</option>
+                <option value="hybrid">hybrid</option>
+                <option value="urethane">urethane</option>
+                <option value="unknown">unknown</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="createSeparateBallFactoryFinishV1">Factory Finish</label>
+              <input id="createSeparateBallFactoryFinishV1" />
+            </div>
+
+            <div>
+              <label for="createSeparateBallCoreNameV1">Core Name</label>
+              <input id="createSeparateBallCoreNameV1" />
+            </div>
+
+            <div>
+              <label for="createSeparateBallCoreTypeV1">Core Type</label>
+              <select id="createSeparateBallCoreTypeV1">
+                <option value="symmetric">symmetric</option>
+                <option value="asymmetric">asymmetric</option>
+                <option value="pancake">pancake</option>
+                <option value="unknown">unknown</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="createSeparateBallIsCurrentV1">Current Catalog?</label>
+              <select id="createSeparateBallIsCurrentV1">
+                <option value="false">false / legacy</option>
+                <option value="true">true / current</option>
+              </select>
+            </div>
+
+            <div class="create-separate-ball-wide">
+              <p class="muted">
+                Use this when the retailer listing is a separate SKU/ball, such as a custom spare ball, logo ball, older colorway, or discontinued retailer inventory.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="create-separate-ball-actions">
+          <button type="button" class="secondary" id="createSeparateBallCancelBtnV1">Cancel</button>
+          <button type="button" id="createSeparateBallSubmitBtnV1">Create Ball + Listing</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("createSeparateBallCloseBtnV1")?.addEventListener("click", closeModal);
+    document.getElementById("createSeparateBallCancelBtnV1")?.addEventListener("click", closeModal);
+    document.getElementById("createSeparateBallSubmitBtnV1")?.addEventListener("click", submitCreateSeparateBall);
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        closeModal();
+      }
+    });
+
+    return modal;
+  }
+
+  function setValue(id, value) {
+    const input = document.getElementById(id);
+    if (input) input.value = value ?? "";
+  }
+
+  function getValue(id) {
+    return document.getElementById(id)?.value?.trim() ?? "";
+  }
+
+  function cleanCanonicalName(listingTitle) {
+    return String(listingTitle ?? "")
+      .replace(/^motiv\s+/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function inferDefaults(listingTitle) {
+    const lower = String(listingTitle ?? "").toLowerCase();
+
+    const spareLike = /\b(spare|pixel|liberty|stadium|crest|velocity)\b/.test(lower);
+
+    if (spareLike) {
+      return {
+        coverstockName: "Polyester",
+        coverstockType: "plastic",
+        coreName: "Pancake",
+        coreType: "symmetric",
+        factoryFinish: "Polished",
+      };
+    }
+
+    if (/\bpearl\b/.test(lower)) {
+      return {
+        coverstockName: "Unknown Pearl Reactive",
+        coverstockType: "pearl",
+        coreName: "",
+        coreType: "unknown",
+        factoryFinish: "",
+      };
+    }
+
+    if (/\bsolid\b/.test(lower)) {
+      return {
+        coverstockName: "Unknown Solid Reactive",
+        coverstockType: "solid",
+        coreName: "",
+        coreType: "unknown",
+        factoryFinish: "",
+      };
+    }
+
+    if (/\bhybrid\b/.test(lower)) {
+      return {
+        coverstockName: "Unknown Hybrid Reactive",
+        coverstockType: "hybrid",
+        coreName: "",
+        coreType: "unknown",
+        factoryFinish: "",
+      };
+    }
+
+    return {
+      coverstockName: "",
+      coverstockType: "unknown",
+      coreName: "",
+      coreType: "unknown",
+      factoryFinish: "",
+    };
+  }
+
+  function closeModal() {
+    ensureModal().classList.add("hidden");
+  }
+
+  function openCreateSeparateBallModal(reviewItemId, listingTitle) {
+    activeReviewItemId = reviewItemId;
+    activeListingTitle = listingTitle;
+
+    const modal = ensureModal();
+    const defaults = inferDefaults(listingTitle);
+
+    document.getElementById("createSeparateBallNoteV1").textContent =
+      `Creating separate ball from: ${listingTitle}`;
+
+    setValue("createSeparateBallCanonicalNameV1", cleanCanonicalName(listingTitle));
+    setValue("createSeparateBallBrandV1", "Motiv");
+    setValue("createSeparateBallManufacturerV1", "Motiv");
+    setValue("createSeparateBallCoverstockNameV1", defaults.coverstockName);
+    setValue("createSeparateBallCoverstockTypeV1", defaults.coverstockType);
+    setValue("createSeparateBallFactoryFinishV1", defaults.factoryFinish);
+    setValue("createSeparateBallCoreNameV1", defaults.coreName);
+    setValue("createSeparateBallCoreTypeV1", defaults.coreType);
+    setValue("createSeparateBallIsCurrentV1", "false");
+
+    modal.classList.remove("hidden");
+  }
+
+  async function submitCreateSeparateBall() {
+    const canonicalName = getValue("createSeparateBallCanonicalNameV1");
+    const brand = getValue("createSeparateBallBrandV1");
+    const manufacturer = getValue("createSeparateBallManufacturerV1");
+
+    if (!activeReviewItemId || !canonicalName || !brand || !manufacturer) {
+      window.alert("Review item, canonical name, brand, and manufacturer are required.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Create separate ball "${brand} ${canonicalName}" from "${activeListingTitle}" and create/update its retailer listing?`
+    );
+
+    if (!confirmed) return;
+
+    const query = encodeQuery({
+      reviewItemId: activeReviewItemId,
+      canonicalName,
+      brand,
+      manufacturer,
+      coverstockName: getValue("createSeparateBallCoverstockNameV1"),
+      coverstockType: getValue("createSeparateBallCoverstockTypeV1"),
+      coreName: getValue("createSeparateBallCoreNameV1"),
+      coreType: getValue("createSeparateBallCoreTypeV1"),
+      factoryFinish: getValue("createSeparateBallFactoryFinishV1"),
+      isCurrent: getValue("createSeparateBallIsCurrentV1"),
+    });
+
+    await apiGet(`/api/retailer-review-items/create-separate-ball?${query}`);
+
+    closeModal();
+
+    if (typeof window.loadRetailerReviewQueueV1 === "function") {
+      await window.loadRetailerReviewQueueV1();
+    }
+
+    if (typeof loadListings === "function") {
+      await loadListings();
+    }
+
+    if (typeof loadCatalogBalls === "function") {
+      await loadCatalogBalls();
+    }
+  }
+
+  function getReviewItemIdFromCard(card) {
+    const buttons = Array.from(card.querySelectorAll("button"));
+    const onclick = buttons
+      .map((button) => button.getAttribute("onclick") ?? "")
+      .find((value) =>
+        value.includes("setRetailerReviewStatusV1") ||
+        value.includes("openRetailerAssignExistingModalV1")
+      );
+
+    const match = onclick?.match(
+      new RegExp("(?:setRetailerReviewStatusV1|openRetailerAssignExistingModalV1)\\\\('([^']+)'")
+    );
+
+    return match?.[1] ?? "";
+  }
+
+  function injectButtons() {
+    document.querySelectorAll("#retailerReviewQueueV1 .review-queue-card").forEach((card) => {
+      if (card.querySelector(".create-separate-ball-btn")) return;
+
+      const reviewItemId = getReviewItemIdFromCard(card);
+      const title = card.querySelector(".review-queue-title")?.textContent?.trim() ?? "";
+      const actions = card.querySelector(".review-queue-actions");
+
+      if (!reviewItemId || !title || !actions) return;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "create-separate-ball-btn";
+      button.textContent = "Create Separate Ball";
+      button.title = "Creates a new legacy/manual ball record and attaches this retailer listing to it.";
+      button.addEventListener("click", () => {
+        openCreateSeparateBallModal(reviewItemId, title);
+      });
+
+      actions.prepend(button);
+    });
+  }
+
+  window.openCreateSeparateBallModalV1 = openCreateSeparateBallModal;
+
+  document.addEventListener("click", () => {
+    setTimeout(injectButtons, 0);
+    setTimeout(injectButtons, 150);
+  });
+
+  setInterval(injectButtons, 1000);
+})();
+
+/* Create Separate Ball button injector V2: robust id extraction */
+(function forceCreateSeparateBallButtonsV2() {
+  if (window.__forceCreateSeparateBallButtonsV2) return;
+  window.__forceCreateSeparateBallButtonsV2 = true;
+
+  function extractFirstQuotedArg(onclickText) {
+    const text = String(onclickText ?? "");
+    const marker = "('";
+    const start = text.indexOf(marker);
+
+    if (start === -1) return "";
+
+    const argStart = start + marker.length;
+    const argEnd = text.indexOf("'", argStart);
+
+    if (argEnd === -1) return "";
+
+    return text.slice(argStart, argEnd);
+  }
+
+  function getReviewItemIdFromCardV2(card) {
+    const buttons = Array.from(card.querySelectorAll("button"));
+
+    for (const button of buttons) {
+      const onclick = button.getAttribute("onclick") ?? "";
+
+      if (
+        onclick.includes("openRetailerAssignExistingModalV1") ||
+        onclick.includes("setRetailerReviewStatusV1")
+      ) {
+        const id = extractFirstQuotedArg(onclick);
+
+        if (id) return id;
+      }
+    }
+
+    return "";
+  }
+
+  function injectCreateButtonsV2() {
+    if (typeof window.openCreateSeparateBallModalV1 !== "function") {
+      return;
+    }
+
+    document.querySelectorAll("#retailerReviewQueueV1 .review-queue-card").forEach((card) => {
+      if (card.querySelector(".create-separate-ball-btn")) return;
+
+      const reviewItemId = getReviewItemIdFromCardV2(card);
+      const title =
+        card.querySelector(".review-queue-title")?.textContent?.trim() ?? "";
+      const actions = card.querySelector(".review-queue-actions");
+
+      if (!reviewItemId || !title || !actions) return;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "create-separate-ball-btn";
+      button.textContent = "Create Separate Ball";
+      button.title =
+        "Creates a new legacy/manual ball record and attaches this retailer listing to it.";
+
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        window.openCreateSeparateBallModalV1(reviewItemId, title);
+      });
+
+      actions.prepend(button);
+    });
+  }
+
+  window.injectCreateSeparateBallButtonsV2 = injectCreateButtonsV2;
+
+  document.addEventListener("click", () => {
+    setTimeout(injectCreateButtonsV2, 0);
+    setTimeout(injectCreateButtonsV2, 150);
+    setTimeout(injectCreateButtonsV2, 400);
+  });
+
+  setInterval(injectCreateButtonsV2, 750);
 })();

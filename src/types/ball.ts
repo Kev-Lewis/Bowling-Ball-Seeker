@@ -43,6 +43,7 @@ export type MatchStatus =
   | "likely_match"
   | "manual_review"
   | "manually_matched"
+  | "manually_matched"
   | "rejected";
 
 export interface RetailerListing {
