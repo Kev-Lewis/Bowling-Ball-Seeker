@@ -118,6 +118,27 @@ function getTableValue(
   return row?.cells[1] ?? null;
 }
 
+function normalizeMotivCanonicalName(name: string | null) {
+  const cleaned = cleanText(name ?? "").replace(/\u00a0/g, " ");
+
+  if (!cleaned) {
+    return null;
+  }
+
+  if (/^MOTIV\s*\|\s*Designer Balls/i.test(cleaned)) {
+    return "Designer Series";
+  }
+
+  return (
+    cleaned
+      .split("|")[0]
+      .replace(/\s+Bowling\s+Balls?\s+for\s+Sale\s*$/i, "")
+      .replace(/\s+Bowling\s+Balls?\s*$/i, "")
+      .replace(/\s+MOTIV\s+Bowling\s*$/i, "")
+      .trim() || null
+  );
+}
+
 function parseBallNameFromTitle(title: string | null) {
   const cleaned = cleanText(title ?? "");
 
@@ -129,12 +150,7 @@ function parseBallNameFromTitle(title: string | null) {
     return "Designer Series";
   }
 
-  return cleaned
-    .split("|")[0]
-    .replace(/\s+Bowling Balls? for Sale$/i, "")
-    .replace(/\s+Bowling Balls?$/i, "")
-    .replace(/\s+MOTIV Bowling$/i, "")
-    .trim() || null;
+  return normalizeMotivCanonicalName(cleaned);
 }
 
 function inferCoverstockType(coverstockName: string | null): CoverstockType {

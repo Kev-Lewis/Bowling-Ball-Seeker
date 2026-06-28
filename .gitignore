@@ -24,3 +24,6 @@ brunswick-page-debug.html
 storm-page*.html
 debug-html/
 scrape-debug/
+
+# Local tracked retailer test responses
+tracked-retailer-*.json

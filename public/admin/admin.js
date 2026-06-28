@@ -2637,3 +2637,364 @@ loadListings();
     });
   };
 })();
+
+/* Loading + elapsed-time monitor for long admin API calls */
+(function setupAdminLoadingElapsedTableV1() {
+  if (window.__adminLoadingElapsedTableV1) return;
+  window.__adminLoadingElapsedTableV1 = true;
+
+  const trackedUrlPatterns = [
+    /\/api\/tracked-manufacturer-sources\/run(?:\?|$)/,
+    /\/api\/tracked-manufacturer-sources\/run-all(?:\?|$)/,
+    /\/api\/tracked-retailer-sources\/run(?:\?|$)/,
+    /\/api\/jobs\/.*\/run(?:\?|$)/,
+    /\/api\/retailers\/bowling-com\/parse-/,
+    /\/api\/retailers\/cleanup-duplicates/,
+  ];
+
+  const state = {
+    nextId: 1,
+    rows: new Map(),
+    timer: null,
+    originalFetch: window.fetch.bind(window),
+  };
+
+  function ensureStyles() {
+    if (document.getElementById("adminLoadingElapsedStylesV1")) return;
+
+    const style = document.createElement("style");
+    style.id = "adminLoadingElapsedStylesV1";
+    style.textContent = `
+      .loading-elapsed-panel {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 9999;
+        width: min(720px, calc(100vw - 36px));
+        max-height: 45vh;
+        overflow: auto;
+        background: rgba(10, 16, 22, 0.96);
+        border: 1px solid rgba(74, 222, 128, 0.35);
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+        border-radius: 14px;
+        color: #e5e7eb;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+      }
+
+      .loading-elapsed-panel.hidden {
+        display: none;
+      }
+
+      .loading-elapsed-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+      }
+
+      .loading-elapsed-title {
+        color: #86efac;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .loading-elapsed-close {
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(15, 23, 42, 0.75);
+        color: #e5e7eb;
+        border-radius: 8px;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+
+      .loading-elapsed-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .loading-elapsed-table th,
+      .loading-elapsed-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+        vertical-align: top;
+        text-align: left;
+      }
+
+      .loading-elapsed-table th {
+        color: #93c5fd;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .loading-status-running {
+        color: #fde68a;
+      }
+
+      .loading-status-success {
+        color: #86efac;
+      }
+
+      .loading-status-error {
+        color: #fca5a5;
+      }
+
+      .loading-elapsed-detail {
+        color: #cbd5e1;
+        max-width: 360px;
+        word-break: break-word;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function ensurePanel() {
+    ensureStyles();
+
+    let panel = document.getElementById("adminLoadingElapsedPanelV1");
+    if (panel) return panel;
+
+    panel = document.createElement("div");
+    panel.id = "adminLoadingElapsedPanelV1";
+    panel.className = "loading-elapsed-panel hidden";
+    panel.innerHTML = `
+      <div class="loading-elapsed-header">
+        <div class="loading-elapsed-title">loading / elapsed</div>
+        <button type="button" class="loading-elapsed-close" id="adminLoadingElapsedCloseV1">close</button>
+      </div>
+      <table class="loading-elapsed-table">
+        <thead>
+          <tr>
+            <th>task</th>
+            <th>status</th>
+            <th>elapsed</th>
+            <th>details</th>
+          </tr>
+        </thead>
+        <tbody id="adminLoadingElapsedBodyV1"></tbody>
+      </table>
+    `;
+
+    document.body.appendChild(panel);
+
+    const closeBtn = document.getElementById("adminLoadingElapsedCloseV1");
+    closeBtn?.addEventListener("click", () => {
+      panel.classList.add("hidden");
+    });
+
+    return panel;
+  }
+
+  function getUrl(input) {
+    if (typeof input === "string") return input;
+    if (input instanceof URL) return input.toString();
+    if (input && typeof input.url === "string") return input.url;
+    return "";
+  }
+
+  function shouldTrack(url) {
+    return trackedUrlPatterns.some((pattern) => pattern.test(url));
+  }
+
+  function labelForUrl(url) {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      const path = parsed.pathname;
+
+      if (path.includes("/tracked-manufacturer-sources/run-all")) {
+        return "manufacturer run-all";
+      }
+
+      if (path.includes("/tracked-manufacturer-sources/run")) {
+        return "manufacturer source run";
+      }
+
+      if (path.includes("/tracked-retailer-sources/run")) {
+        return "retailer source run";
+      }
+
+      if (path.includes("/jobs/")) {
+        return path.replace("/api/jobs/", "job: ");
+      }
+
+      if (path.includes("/bowling-com/parse-category")) {
+        return "bowling.com category parse";
+      }
+
+      if (path.includes("/bowling-com/parse-product")) {
+        return "bowling.com product parse";
+      }
+
+      return path.replace(/^\/api\//, "");
+    } catch {
+      return url;
+    }
+  }
+
+  function formatElapsed(ms) {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  }
+
+  function summarizeJson(json) {
+    const data = json?.data ?? json;
+    const result = data?.result ?? data;
+
+    if (data?.sourceCount != null) {
+      return `sources ${data.successfulCount ?? 0}/${data.sourceCount}, failed ${data.failedCount ?? 0}`;
+    }
+
+    if (result?.discoveredCount != null || result?.parsedCount != null) {
+      return `discovered ${result.discoveredCount ?? "?"}, parsed ${result.parsedCount ?? "?"}, failures ${result.failureCount ?? 0}`;
+    }
+
+    if (result?.scrapedCount != null || result?.savedCount != null) {
+      return `scraped ${result.scrapedCount ?? "?"}, saved ${result.savedCount ?? "?"}, review ${result.skippedNeedsReviewCount ?? 0}`;
+    }
+
+    if (data?.count != null) {
+      return `count ${data.count}`;
+    }
+
+    return "complete";
+  }
+
+  function render() {
+    const panel = ensurePanel();
+    const body = document.getElementById("adminLoadingElapsedBodyV1");
+    if (!body) return;
+
+    const rows = Array.from(state.rows.values()).sort((a, b) => b.startedAt - a.startedAt);
+
+    body.innerHTML = rows
+      .map((row) => {
+        const elapsed = row.finishedAt
+          ? row.finishedAt - row.startedAt
+          : Date.now() - row.startedAt;
+
+        const statusClass =
+          row.status === "success"
+            ? "loading-status-success"
+            : row.status === "error"
+              ? "loading-status-error"
+              : "loading-status-running";
+
+        return `
+          <tr>
+            <td>${escapeHtml(row.label)}</td>
+            <td class="${statusClass}">${escapeHtml(row.status)}</td>
+            <td>${formatElapsed(elapsed)}</td>
+            <td class="loading-elapsed-detail">${escapeHtml(row.detail ?? "")}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    if (rows.length > 0) {
+      panel.classList.remove("hidden");
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function startTimer() {
+    if (state.timer) return;
+
+    state.timer = window.setInterval(() => {
+      const hasRunning = Array.from(state.rows.values()).some((row) => !row.finishedAt);
+      render();
+
+      if (!hasRunning) {
+        window.clearInterval(state.timer);
+        state.timer = null;
+      }
+    }, 500);
+  }
+
+  function addRow(url) {
+    const id = state.nextId++;
+    state.rows.set(id, {
+      id,
+      label: labelForUrl(url),
+      status: "running",
+      detail: "waiting for response...",
+      startedAt: Date.now(),
+      finishedAt: null,
+    });
+
+    render();
+    startTimer();
+    return id;
+  }
+
+  function updateRow(id, patch) {
+    const row = state.rows.get(id);
+    if (!row) return;
+    state.rows.set(id, { ...row, ...patch });
+    render();
+  }
+
+  window.fetch = async function adminLoadingFetch(input, init) {
+    const url = getUrl(input);
+    const track = shouldTrack(url);
+    const rowId = track ? addRow(url) : null;
+
+    try {
+      const response = await state.originalFetch(input, init);
+
+      if (track && rowId != null) {
+        const finishedAt = Date.now();
+
+        if (!response.ok) {
+          updateRow(rowId, {
+            status: "error",
+            detail: `HTTP ${response.status}`,
+            finishedAt,
+          });
+        } else {
+          response
+            .clone()
+            .json()
+            .then((json) => {
+              updateRow(rowId, {
+                status: "success",
+                detail: summarizeJson(json),
+                finishedAt,
+              });
+            })
+            .catch(() => {
+              updateRow(rowId, {
+                status: "success",
+                detail: `HTTP ${response.status}`,
+                finishedAt,
+              });
+            });
+        }
+      }
+
+      return response;
+    } catch (error) {
+      if (track && rowId != null) {
+        updateRow(rowId, {
+          status: "error",
+          detail: error instanceof Error ? error.message : "request failed",
+          finishedAt: Date.now(),
+        });
+      }
+
+      throw error;
+    }
+  };
+})();
