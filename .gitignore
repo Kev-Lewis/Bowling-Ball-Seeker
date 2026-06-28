@@ -12,3 +12,22 @@ data/*.sqlite
 *.page.html
 debug-html/
 scrape-debug/
+
+# Local SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+prisma/*.db
+prisma/*.sqlite
+prisma/*.sqlite3
+
+# Local API/debug responses
+*-source.json
+*-run.json
+sources.json
+manufacturer-run-all.json
+daily-manufacturer-sync.json
+*-page*.html
+*.page.html
+brunswick-page-debug.html
+storm-page*.html
