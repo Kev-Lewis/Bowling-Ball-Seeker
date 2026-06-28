@@ -4362,3 +4362,1028 @@ loadListings();
     openModal(decodeURIComponent(encodedSourceId));
   };
 })();
+
+/* Retailer scrape output summary table */
+(function setupRetailerScrapeOutputSummaryV1() {
+  if (window.__retailerScrapeOutputSummaryV1) return;
+  window.__retailerScrapeOutputSummaryV1 = true;
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function getRetailerResults(payload) {
+    const results = payload?.data?.results ?? payload?.results ?? [];
+
+    return results
+      .map((item) => {
+        const result = item.result ?? item;
+        const source = item.source?.name ?? result.sourceName ?? "Unknown source";
+
+        if (
+          result.savedCount === undefined &&
+          result.skippedLegacyReviewCount === undefined &&
+          result.skippedListingReviews === undefined
+        ) {
+          return null;
+        }
+
+        return { source, result };
+      })
+      .filter(Boolean);
+  }
+
+  function removeExistingSummary() {
+    document.getElementById("retailerScrapeSummaryV1")?.remove();
+  }
+
+  function buildReasonCounts(reviews) {
+    return reviews.reduce((acc, row) => {
+      const reason = row.legacyReviewReason ?? row.status ?? "unknown";
+      acc[reason] = (acc[reason] ?? 0) + 1;
+      return acc;
+    }, {});
+  }
+
+  function renderRetailerScrapeSummary(payload) {
+    removeExistingSummary();
+
+    const scrapeOutput = document.getElementById("scrapeOutput");
+    if (!scrapeOutput) return;
+
+    const sources = getRetailerResults(payload);
+    if (sources.length === 0) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.id = "retailerScrapeSummaryV1";
+    wrapper.style.marginTop = "16px";
+
+    const sourceBlocks = sources
+      .map(({ source, result }) => {
+        const reviews = result.skippedListingReviews ?? [];
+        const reasonCounts = buildReasonCounts(reviews);
+
+        const reasonRows =
+          Object.entries(reasonCounts).length > 0
+            ? Object.entries(reasonCounts)
+                .map(([reason, count]) => {
+                  return `
+                    <tr>
+                      <td>${escapeHtml(reason)}</td>
+                      <td>${escapeHtml(count)}</td>
+                    </tr>
+                  `;
+                })
+                .join("")
+            : `
+              <tr>
+                <td colspan="2" class="muted">No review rows.</td>
+              </tr>
+            `;
+
+        const reviewRows =
+          reviews.length > 0
+            ? reviews
+                .map((row) => {
+                  const selected = row.selectedMatch
+                    ? `${row.selectedMatch.brand} ${row.selectedMatch.canonicalName}`
+                    : "—";
+
+                  return `
+                    <tr>
+                      <td>${escapeHtml(row.status)}</td>
+                      <td>${escapeHtml(row.legacyReviewReason ?? "—")}</td>
+                      <td>${escapeHtml(row.listing?.listingTitle ?? "—")}</td>
+                      <td>${escapeHtml(row.listing?.currentPrice ?? "—")}</td>
+                      <td>${escapeHtml(row.listing?.stockStatus ?? "—")}</td>
+                      <td>${escapeHtml(selected)}</td>
+                      <td>${escapeHtml(row.selectedMatch?.catalogState ?? "—")}</td>
+                      <td>${escapeHtml(row.selectedMatch?.confidence ?? "—")}</td>
+                    </tr>
+                  `;
+                })
+                .join("")
+            : `
+              <tr>
+                <td colspan="8" class="muted">No legacy or review rows.</td>
+              </tr>
+            `;
+
+        return `
+          <div class="card" style="margin-top: 14px;">
+            <h3>Retailer Scrape Summary</h3>
+            <p class="muted">${escapeHtml(source)}</p>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Discovered</th>
+                  <th>Scraped</th>
+                  <th>Saved</th>
+                  <th>No Match</th>
+                  <th>Needs Review</th>
+                  <th>Legacy Review</th>
+                  <th>Created</th>
+                  <th>Updated</th>
+                  <th>Snapshots Created</th>
+                  <th>Snapshots Skipped</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>${escapeHtml(result.discoveredProductCount ?? "—")}</td>
+                  <td>${escapeHtml(result.scrapedCount ?? "—")}</td>
+                  <td>${escapeHtml(result.savedCount ?? "—")}</td>
+                  <td>${escapeHtml(result.skippedNoMatchCount ?? 0)}</td>
+                  <td>${escapeHtml(result.skippedNeedsReviewCount ?? 0)}</td>
+                  <td>${escapeHtml(result.skippedLegacyReviewCount ?? 0)}</td>
+                  <td>${escapeHtml(result.createdListingCount ?? "—")}</td>
+                  <td>${escapeHtml(result.updatedListingCount ?? "—")}</td>
+                  <td>${escapeHtml(result.snapshotCreatedCount ?? "—")}</td>
+                  <td>${escapeHtml(result.snapshotSkippedCount ?? "—")}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h4 style="margin-top: 16px;">Review Reason Counts</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Reason</th>
+                  <th>Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${reasonRows}
+              </tbody>
+            </table>
+
+            <h4 style="margin-top: 16px;">Legacy / Review Rows</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Reason</th>
+                  <th>Listing</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Selected Candidate</th>
+                  <th>Catalog State</th>
+                  <th>Confidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${reviewRows}
+              </tbody>
+            </table>
+          </div>
+        `;
+      })
+      .join("");
+
+    wrapper.innerHTML = sourceBlocks;
+    scrapeOutput.insertAdjacentElement("beforebegin", wrapper);
+  }
+
+  if (typeof renderJson === "function") {
+    const originalRenderJson = renderJson;
+
+    renderJson = function renderJsonWithRetailerSummary(elementId, data) {
+      originalRenderJson(elementId, data);
+
+      if (elementId === "scrapeOutput") {
+        renderRetailerScrapeSummary(data);
+      }
+    };
+  }
+})();
+
+/* Retailer scrape output summary table V2: supports single-source and run-all payloads */
+(function setupRetailerScrapeOutputSummaryV2() {
+  if (window.__retailerScrapeOutputSummaryV2) return;
+  window.__retailerScrapeOutputSummaryV2 = true;
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function getRetailerResults(payload) {
+    if (payload?.source && payload?.result) {
+      return [
+        {
+          source: payload.source?.name ?? payload.result?.sourceName ?? "Unknown source",
+          result: payload.result,
+        },
+      ];
+    }
+
+    if (payload?.data?.source && payload?.data?.result) {
+      return [
+        {
+          source:
+            payload.data.source?.name ??
+            payload.data.result?.sourceName ??
+            "Unknown source",
+          result: payload.data.result,
+        },
+      ];
+    }
+
+    const results = payload?.data?.results ?? payload?.results ?? [];
+
+    return results
+      .map((item) => {
+        const result = item.result ?? item;
+        const source = item.source?.name ?? result.sourceName ?? "Unknown source";
+
+        if (
+          result.savedCount === undefined &&
+          result.skippedLegacyReviewCount === undefined &&
+          result.skippedListingReviews === undefined
+        ) {
+          return null;
+        }
+
+        return { source, result };
+      })
+      .filter(Boolean);
+  }
+
+  function buildReasonCounts(reviews) {
+    return reviews.reduce((acc, row) => {
+      const reason = row.legacyReviewReason ?? row.status ?? "unknown";
+      acc[reason] = (acc[reason] ?? 0) + 1;
+      return acc;
+    }, {});
+  }
+
+  function removeExistingSummaries() {
+    document.getElementById("retailerScrapeSummaryV1")?.remove();
+    document.getElementById("retailerScrapeSummaryV2")?.remove();
+  }
+
+  function renderRetailerScrapeSummary(payload) {
+    removeExistingSummaries();
+
+    const scrapeOutput = document.getElementById("scrapeOutput");
+    if (!scrapeOutput) return;
+
+    const sources = getRetailerResults(payload);
+    if (sources.length === 0) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.id = "retailerScrapeSummaryV2";
+    wrapper.style.marginTop = "16px";
+
+    wrapper.innerHTML = sources
+      .map(({ source, result }) => {
+        const reviews = result.skippedListingReviews ?? [];
+        const reasonCounts = buildReasonCounts(reviews);
+
+        const reasonRows =
+          Object.entries(reasonCounts).length > 0
+            ? Object.entries(reasonCounts)
+                .map(([reason, count]) => {
+                  return `
+                    <tr>
+                      <td>${escapeHtml(reason)}</td>
+                      <td>${escapeHtml(count)}</td>
+                    </tr>
+                  `;
+                })
+                .join("")
+            : `<tr><td colspan="2" class="muted">No review rows.</td></tr>`;
+
+        const reviewRows =
+          reviews.length > 0
+            ? reviews
+                .map((row) => {
+                  const selected = row.selectedMatch
+                    ? `${row.selectedMatch.brand} ${row.selectedMatch.canonicalName}`
+                    : "—";
+
+                  return `
+                    <tr>
+                      <td>${escapeHtml(row.status)}</td>
+                      <td>${escapeHtml(row.legacyReviewReason ?? "—")}</td>
+                      <td>${escapeHtml(row.listing?.listingTitle ?? "—")}</td>
+                      <td>${escapeHtml(row.listing?.currentPrice ?? "—")}</td>
+                      <td>${escapeHtml(row.listing?.stockStatus ?? "—")}</td>
+                      <td>${escapeHtml(selected)}</td>
+                      <td>${escapeHtml(row.selectedMatch?.catalogState ?? "—")}</td>
+                      <td>${escapeHtml(row.selectedMatch?.confidence ?? "—")}</td>
+                    </tr>
+                  `;
+                })
+                .join("")
+            : `<tr><td colspan="8" class="muted">No legacy or review rows.</td></tr>`;
+
+        return `
+          <div class="card" style="margin-top: 14px;">
+            <h3>Retailer Scrape Summary</h3>
+            <p class="muted">${escapeHtml(source)}</p>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Discovered</th>
+                  <th>Scraped</th>
+                  <th>Saved</th>
+                  <th>No Match</th>
+                  <th>Needs Review</th>
+                  <th>Legacy Review</th>
+                  <th>Created</th>
+                  <th>Updated</th>
+                  <th>Snapshots Created</th>
+                  <th>Snapshots Skipped</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>${escapeHtml(result.discoveredProductCount ?? "—")}</td>
+                  <td>${escapeHtml(result.scrapedCount ?? "—")}</td>
+                  <td>${escapeHtml(result.savedCount ?? "—")}</td>
+                  <td>${escapeHtml(result.skippedNoMatchCount ?? 0)}</td>
+                  <td>${escapeHtml(result.skippedNeedsReviewCount ?? 0)}</td>
+                  <td>${escapeHtml(result.skippedLegacyReviewCount ?? 0)}</td>
+                  <td>${escapeHtml(result.createdListingCount ?? "—")}</td>
+                  <td>${escapeHtml(result.updatedListingCount ?? "—")}</td>
+                  <td>${escapeHtml(result.snapshotCreatedCount ?? "—")}</td>
+                  <td>${escapeHtml(result.snapshotSkippedCount ?? "—")}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h4 style="margin-top: 16px;">Review Reason Counts</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Reason</th>
+                  <th>Count</th>
+                </tr>
+              </thead>
+              <tbody>${reasonRows}</tbody>
+            </table>
+
+            <h4 style="margin-top: 16px;">Legacy / Review Rows</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Reason</th>
+                  <th>Listing</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Selected Candidate</th>
+                  <th>Catalog State</th>
+                  <th>Confidence</th>
+                </tr>
+              </thead>
+              <tbody>${reviewRows}</tbody>
+            </table>
+          </div>
+        `;
+      })
+      .join("");
+
+    scrapeOutput.insertAdjacentElement("beforebegin", wrapper);
+  }
+
+  if (typeof renderJson === "function") {
+    const originalRenderJson = renderJson;
+
+    renderJson = function renderJsonWithRetailerSummaryV2(elementId, data) {
+      originalRenderJson(elementId, data);
+
+      if (elementId === "scrapeOutput") {
+        renderRetailerScrapeSummary(data);
+      }
+    };
+  }
+})();
+
+/* Retailer scrape output summary table V3: render after modal opens */
+(function setupRetailerScrapeOutputSummaryV3() {
+  if (window.__retailerScrapeOutputSummaryV3) return;
+  window.__retailerScrapeOutputSummaryV3 = true;
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function getPayload() {
+    try {
+      return window.lastScrapeOutput ?? lastScrapeOutput ?? null;
+    } catch {
+      return window.lastScrapeOutput ?? null;
+    }
+  }
+
+  function getRetailerResults(payload) {
+    if (!payload) return [];
+
+    if (payload.source && payload.result) {
+      return [
+        {
+          source: payload.source?.name ?? payload.result?.sourceName ?? "Unknown source",
+          result: payload.result,
+        },
+      ];
+    }
+
+    if (payload.data?.source && payload.data?.result) {
+      return [
+        {
+          source:
+            payload.data.source?.name ??
+            payload.data.result?.sourceName ??
+            "Unknown source",
+          result: payload.data.result,
+        },
+      ];
+    }
+
+    const results = payload.data?.results ?? payload.results ?? [];
+
+    return results
+      .map((item) => {
+        const result = item.result ?? item;
+        const source = item.source?.name ?? result.sourceName ?? "Unknown source";
+
+        if (
+          result.savedCount === undefined &&
+          result.skippedLegacyReviewCount === undefined &&
+          result.skippedListingReviews === undefined
+        ) {
+          return null;
+        }
+
+        return { source, result };
+      })
+      .filter(Boolean);
+  }
+
+  function buildReasonCounts(reviews) {
+    return reviews.reduce((acc, row) => {
+      const reason = row.legacyReviewReason ?? row.status ?? "unknown";
+      acc[reason] = (acc[reason] ?? 0) + 1;
+      return acc;
+    }, {});
+  }
+
+  function removeOldSummaries() {
+    document.getElementById("retailerScrapeSummaryV1")?.remove();
+    document.getElementById("retailerScrapeSummaryV2")?.remove();
+    document.getElementById("retailerScrapeSummaryV3")?.remove();
+  }
+
+  function renderSummary() {
+    const payload = getPayload();
+    const sources = getRetailerResults(payload);
+
+    removeOldSummaries();
+
+    if (sources.length === 0) return;
+
+    const scrapeOutput = document.getElementById("scrapeOutput");
+    if (!scrapeOutput) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.id = "retailerScrapeSummaryV3";
+    wrapper.style.marginTop = "16px";
+
+    wrapper.innerHTML = sources
+      .map(({ source, result }) => {
+        const reviews = result.skippedListingReviews ?? [];
+        const reasonCounts = buildReasonCounts(reviews);
+
+        const reasonRows =
+          Object.entries(reasonCounts).length > 0
+            ? Object.entries(reasonCounts)
+                .map(([reason, count]) => {
+                  return `
+                    <tr>
+                      <td>${escapeHtml(reason)}</td>
+                      <td>${escapeHtml(count)}</td>
+                    </tr>
+                  `;
+                })
+                .join("")
+            : `<tr><td colspan="2" class="muted">No review rows.</td></tr>`;
+
+        const reviewRows =
+          reviews.length > 0
+            ? reviews
+                .map((row) => {
+                  const selected = row.selectedMatch
+                    ? `${row.selectedMatch.brand} ${row.selectedMatch.canonicalName}`
+                    : "—";
+
+                  return `
+                    <tr>
+                      <td>${escapeHtml(row.status)}</td>
+                      <td>${escapeHtml(row.legacyReviewReason ?? "—")}</td>
+                      <td>${escapeHtml(row.listing?.listingTitle ?? "—")}</td>
+                      <td>${escapeHtml(row.listing?.currentPrice ?? "—")}</td>
+                      <td>${escapeHtml(row.listing?.stockStatus ?? "—")}</td>
+                      <td>${escapeHtml(selected)}</td>
+                      <td>${escapeHtml(row.selectedMatch?.catalogState ?? "—")}</td>
+                      <td>${escapeHtml(row.selectedMatch?.confidence ?? "—")}</td>
+                    </tr>
+                  `;
+                })
+                .join("")
+            : `<tr><td colspan="8" class="muted">No legacy or review rows.</td></tr>`;
+
+        return `
+          <section class="card" style="margin-top: 14px;">
+            <h3>Retailer Scrape Summary</h3>
+            <p class="muted">${escapeHtml(source)}</p>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Discovered</th>
+                  <th>Scraped</th>
+                  <th>Saved</th>
+                  <th>No Match</th>
+                  <th>Needs Review</th>
+                  <th>Legacy Review</th>
+                  <th>Created</th>
+                  <th>Updated</th>
+                  <th>Snapshots Created</th>
+                  <th>Snapshots Skipped</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>${escapeHtml(result.discoveredProductCount ?? "—")}</td>
+                  <td>${escapeHtml(result.scrapedCount ?? "—")}</td>
+                  <td>${escapeHtml(result.savedCount ?? "—")}</td>
+                  <td>${escapeHtml(result.skippedNoMatchCount ?? 0)}</td>
+                  <td>${escapeHtml(result.skippedNeedsReviewCount ?? 0)}</td>
+                  <td>${escapeHtml(result.skippedLegacyReviewCount ?? 0)}</td>
+                  <td>${escapeHtml(result.createdListingCount ?? "—")}</td>
+                  <td>${escapeHtml(result.updatedListingCount ?? "—")}</td>
+                  <td>${escapeHtml(result.snapshotCreatedCount ?? "—")}</td>
+                  <td>${escapeHtml(result.snapshotSkippedCount ?? "—")}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h4 style="margin-top: 16px;">Review Reason Counts</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Reason</th>
+                  <th>Count</th>
+                </tr>
+              </thead>
+              <tbody>${reasonRows}</tbody>
+            </table>
+
+            <h4 style="margin-top: 16px;">Legacy / Review Rows</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Reason</th>
+                  <th>Listing</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Selected Candidate</th>
+                  <th>Catalog State</th>
+                  <th>Confidence</th>
+                </tr>
+              </thead>
+              <tbody>${reviewRows}</tbody>
+            </table>
+          </section>
+        `;
+      })
+      .join("");
+
+    scrapeOutput.insertAdjacentElement("beforebegin", wrapper);
+  }
+
+  window.renderRetailerScrapeSummaryV3 = renderSummary;
+
+  if (typeof openScrapeOutputModal === "function") {
+    const originalOpenScrapeOutputModal = openScrapeOutputModal;
+
+    openScrapeOutputModal = function openScrapeOutputModalWithRetailerSummaryV3() {
+      originalOpenScrapeOutputModal();
+      setTimeout(renderSummary, 0);
+      setTimeout(renderSummary, 100);
+    };
+  }
+
+  if (typeof renderJson === "function") {
+    const originalRenderJson = renderJson;
+
+    renderJson = function renderJsonWithRetailerSummaryV3(elementId, data) {
+      originalRenderJson(elementId, data);
+
+      if (elementId === "scrapeOutput") {
+        try {
+          window.lastScrapeOutput = data;
+        } catch {
+          // ignore
+        }
+
+        setTimeout(renderSummary, 0);
+      }
+    };
+  }
+})();
+
+/* Retailer scrape output summary V4: card layout for readable legacy rows */
+(function setupRetailerScrapeOutputSummaryV4() {
+  if (window.__retailerScrapeOutputSummaryV4) return;
+  window.__retailerScrapeOutputSummaryV4 = true;
+
+  function ensureStyles() {
+    if (document.getElementById("retailerScrapeSummaryV4Styles")) return;
+
+    const style = document.createElement("style");
+    style.id = "retailerScrapeSummaryV4Styles";
+    style.textContent = `
+      #retailerScrapeSummaryV4 {
+        margin-top: 16px;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-summary-card {
+        margin-top: 14px;
+        padding: 16px;
+        border: 1px solid #d6e0ef;
+        border-radius: 16px;
+        background: #ffffff;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-summary-title {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-summary-title h3 {
+        margin: 0;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-metric-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 10px;
+        margin: 12px 0 16px;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-metric {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: #f8fafc;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-metric-label {
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-metric-value {
+        margin-top: 4px;
+        font-size: 20px;
+        font-weight: 800;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-reason-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 10px;
+        margin: 10px 0 18px;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-reason-pill {
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 13px;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-review-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 12px;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-review-card {
+        border: 1px solid #dbe7f5;
+        border-radius: 14px;
+        padding: 12px;
+        background: #fbfdff;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-review-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-review-title {
+        font-weight: 800;
+        line-height: 1.3;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-review-price {
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-review-meta {
+        display: grid;
+        grid-template-columns: 95px 1fr;
+        gap: 6px 10px;
+        font-size: 13px;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-review-meta .label {
+        color: #64748b;
+        font-weight: 700;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-status-chip {
+        display: inline-flex;
+        width: fit-content;
+        border-radius: 999px;
+        padding: 3px 8px;
+        background: #eef2ff;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-reason-text {
+        overflow-wrap: anywhere;
+      }
+
+      #retailerScrapeSummaryV4 .retailer-output-json-note {
+        margin-top: 12px;
+        color: #64748b;
+        font-size: 12px;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function getPayload() {
+    try {
+      return window.lastScrapeOutput ?? lastScrapeOutput ?? null;
+    } catch {
+      return window.lastScrapeOutput ?? null;
+    }
+  }
+
+  function getRetailerResults(payload) {
+    if (!payload) return [];
+
+    if (payload.source && payload.result) {
+      return [{
+        source: payload.source?.name ?? payload.result?.sourceName ?? "Unknown source",
+        result: payload.result,
+      }];
+    }
+
+    if (payload.data?.source && payload.data?.result) {
+      return [{
+        source: payload.data.source?.name ?? payload.data.result?.sourceName ?? "Unknown source",
+        result: payload.data.result,
+      }];
+    }
+
+    const results = payload.data?.results ?? payload.results ?? [];
+
+    return results
+      .map((item) => {
+        const result = item.result ?? item;
+        const source = item.source?.name ?? result.sourceName ?? "Unknown source";
+
+        if (
+          result.savedCount === undefined &&
+          result.skippedLegacyReviewCount === undefined &&
+          result.skippedListingReviews === undefined
+        ) {
+          return null;
+        }
+
+        return { source, result };
+      })
+      .filter(Boolean);
+  }
+
+  function buildReasonCounts(reviews) {
+    return reviews.reduce((acc, row) => {
+      const reason = row.legacyReviewReason ?? row.status ?? "unknown";
+      acc[reason] = (acc[reason] ?? 0) + 1;
+      return acc;
+    }, {});
+  }
+
+  function metric(label, value) {
+    return `
+      <div class="retailer-metric">
+        <div class="retailer-metric-label">${escapeHtml(label)}</div>
+        <div class="retailer-metric-value">${escapeHtml(value ?? "—")}</div>
+      </div>
+    `;
+  }
+
+  function removeOldSummaries() {
+    document.getElementById("retailerScrapeSummaryV1")?.remove();
+    document.getElementById("retailerScrapeSummaryV2")?.remove();
+    document.getElementById("retailerScrapeSummaryV3")?.remove();
+    document.getElementById("retailerScrapeSummaryV4")?.remove();
+  }
+
+  function renderSummary() {
+    ensureStyles();
+
+    const payload = getPayload();
+    const sources = getRetailerResults(payload);
+
+    removeOldSummaries();
+
+    if (sources.length === 0) return;
+
+    const scrapeOutput = document.getElementById("scrapeOutput");
+    if (!scrapeOutput) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.id = "retailerScrapeSummaryV4";
+
+    wrapper.innerHTML = sources
+      .map(({ source, result }) => {
+        const reviews = result.skippedListingReviews ?? [];
+        const reasonCounts = buildReasonCounts(reviews);
+
+        const reasonPills =
+          Object.entries(reasonCounts).length > 0
+            ? Object.entries(reasonCounts)
+                .map(([reason, count]) => `
+                  <div class="retailer-reason-pill">
+                    <span>${escapeHtml(reason)}</span>
+                    <strong>${escapeHtml(count)}</strong>
+                  </div>
+                `)
+                .join("")
+            : `<p class="muted">No review rows.</p>`;
+
+        const reviewCards =
+          reviews.length > 0
+            ? reviews
+                .map((row) => {
+                  const selected = row.selectedMatch
+                    ? `${row.selectedMatch.brand} ${row.selectedMatch.canonicalName}`
+                    : "—";
+
+                  return `
+                    <article class="retailer-review-card">
+                      <div class="retailer-review-head">
+                        <div class="retailer-review-title">${escapeHtml(row.listing?.listingTitle ?? "—")}</div>
+                        <div class="retailer-review-price">$${escapeHtml(row.listing?.currentPrice ?? "—")}</div>
+                      </div>
+
+                      <div class="retailer-review-meta">
+                        <div class="label">Status</div>
+                        <div><span class="retailer-status-chip">${escapeHtml(row.status)}</span></div>
+
+                        <div class="label">Reason</div>
+                        <div class="retailer-reason-text">${escapeHtml(row.legacyReviewReason ?? "—")}</div>
+
+                        <div class="label">Stock</div>
+                        <div>${escapeHtml(row.listing?.stockStatus ?? "—")}</div>
+
+                        <div class="label">Candidate</div>
+                        <div>${escapeHtml(selected)}</div>
+
+                        <div class="label">Catalog</div>
+                        <div>${escapeHtml(row.selectedMatch?.catalogState ?? "—")}</div>
+
+                        <div class="label">Confidence</div>
+                        <div>${escapeHtml(row.selectedMatch?.confidence ?? "—")}</div>
+                      </div>
+                    </article>
+                  `;
+                })
+                .join("")
+            : `<p class="muted">No legacy or review rows.</p>`;
+
+        return `
+          <section class="retailer-summary-card">
+            <div class="retailer-summary-title">
+              <h3>Retailer Scrape Summary</h3>
+              <span class="muted">${escapeHtml(source)}</span>
+            </div>
+
+            <div class="retailer-metric-grid">
+              ${metric("Discovered", result.discoveredProductCount)}
+              ${metric("Scraped", result.scrapedCount)}
+              ${metric("Saved", result.savedCount)}
+              ${metric("No Match", result.skippedNoMatchCount ?? 0)}
+              ${metric("Needs Review", result.skippedNeedsReviewCount ?? 0)}
+              ${metric("Legacy Review", result.skippedLegacyReviewCount ?? 0)}
+              ${metric("Created", result.createdListingCount)}
+              ${metric("Updated", result.updatedListingCount)}
+              ${metric("Snapshots Created", result.snapshotCreatedCount)}
+              ${metric("Snapshots Skipped", result.snapshotSkippedCount)}
+            </div>
+
+            <h4>Review Reason Counts</h4>
+            <div class="retailer-reason-grid">
+              ${reasonPills}
+            </div>
+
+            <h4>Legacy / Review Rows</h4>
+            <div class="retailer-review-grid">
+              ${reviewCards}
+            </div>
+
+            <div class="retailer-output-json-note">
+              Raw JSON is still shown below for debugging/export.
+            </div>
+          </section>
+        `;
+      })
+      .join("");
+
+    scrapeOutput.insertAdjacentElement("beforebegin", wrapper);
+  }
+
+  window.renderRetailerScrapeSummaryV4 = renderSummary;
+  window.renderRetailerScrapeSummaryV3 = renderSummary;
+
+  if (typeof openScrapeOutputModal === "function") {
+    const originalOpenScrapeOutputModal = openScrapeOutputModal;
+
+    openScrapeOutputModal = function openScrapeOutputModalWithRetailerSummaryV4() {
+      originalOpenScrapeOutputModal();
+      setTimeout(renderSummary, 0);
+      setTimeout(renderSummary, 150);
+      setTimeout(renderSummary, 300);
+    };
+  }
+
+  if (typeof renderJson === "function") {
+    const originalRenderJson = renderJson;
+
+    renderJson = function renderJsonWithRetailerSummaryV4(elementId, data) {
+      originalRenderJson(elementId, data);
+
+      if (elementId === "scrapeOutput") {
+        try {
+          window.lastScrapeOutput = data;
+        } catch {
+          // ignore
+        }
+
+        setTimeout(renderSummary, 0);
+        setTimeout(renderSummary, 150);
+      }
+    };
+  }
+})();
