@@ -7,3 +7,8 @@ dist
 # local data/dev db
 data/*.db
 data/*.sqlite
+# Scraper debug/page dumps
+*-page*.html
+*.page.html
+debug-html/
+scrape-debug/
