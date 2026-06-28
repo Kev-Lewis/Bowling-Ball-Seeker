@@ -1030,7 +1030,10 @@ function renderTrackedSources(data) {
           </td>
           <td>
             <div class="cell-actions">
-              <button onclick="runTrackedSourceFromEncoded('${encodedSourceId}')">Run</button>
+              ${source.enabled
+                ? `<button onclick="runTrackedSourceFromEncoded('${encodedSourceId}')">Run</button>`
+                : `<button class="secondary" disabled title="Enable this source before running it">Run</button>`
+              }
               <button class="secondary" onclick="useTrackedSourceFromEncoded('${encodedSourceId}')">
                 Use
               </button>
@@ -1118,6 +1121,76 @@ async function runTrackedSource(sourceId) {
     lastScrapeOutput = errorOutput;
     renderJson("scrapeOutput", errorOutput);
     openScrapeOutputModal();
+    setStatus("Error", "error");
+  }
+}
+
+
+async function runAllTrackedSources() {
+  try {
+    const data = await apiGet("/api/tracked-retailer-sources/run-all");
+
+    lastScrapeOutput = data;
+    renderJson("scrapeOutput", data);
+    openScrapeOutputModal();
+
+    const summary = document.getElementById("trackedSourcesSummary");
+    if (summary) {
+      summary.textContent = `Ran enabled retailer sources: ${data.successfulCount ?? 0}/${data.sourceCount ?? 0} succeeded, ${data.failedCount ?? 0} failed.`;
+    }
+
+    scheduleDashboardSummaryRefresh();
+    await loadListings();
+    await loadTrackedSources();
+  } catch (error) {
+    const errorOutput = { error: error.message };
+
+    lastScrapeOutput = errorOutput;
+    renderJson("scrapeOutput", errorOutput);
+    openScrapeOutputModal();
+    setStatus("Error", "error");
+  }
+}
+
+
+async function deleteTrackedSourceFromEncoded(encodedSourceId) {
+  await deleteTrackedSource(decodeURIComponent(encodedSourceId));
+}
+
+async function deleteTrackedSource(sourceId) {
+  try {
+    const source = getTrackedSourceById(sourceId);
+
+    if (!source) {
+      throw new Error(`Tracked source not loaded: ${sourceId}`);
+    }
+
+    if (source.enabled) {
+      throw new Error("Disable the tracked source before deleting it.");
+    }
+
+    const confirmed = window.confirm(`Delete disabled retailer source: ${source.name}?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    const data = await apiGet(
+      `/api/tracked-retailer-sources/delete?id=${encodeURIComponent(sourceId)}`
+    );
+
+    const summary = document.getElementById("trackedSourcesSummary");
+    if (summary) {
+      summary.textContent = `Deleted tracked source: ${data.data?.name ?? source.name}.`;
+    }
+
+    await loadTrackedSources();
+  } catch (error) {
+    const summary = document.getElementById("trackedSourcesSummary");
+    if (summary) {
+      summary.textContent = `Delete source error: ${error.message}`;
+    }
+
     setStatus("Error", "error");
   }
 }
@@ -1341,6 +1414,9 @@ function renderManufacturerSources(data) {
       const enabledText = source.enabled ? "enabled" : "disabled";
       const toggleText = source.enabled ? "Disable" : "Enable";
       const nextEnabled = source.enabled ? "false" : "true";
+      const deleteButton = source.enabled
+        ? ""
+        : `<button class="danger" onclick="deleteTrackedSourceFromEncoded('${encodedSourceId}')">Delete</button>`;
 
       return `
         <tr class="listing-row">
@@ -2647,6 +2723,7 @@ loadListings();
     /\/api\/tracked-manufacturer-sources\/run(?:\?|$)/,
     /\/api\/tracked-manufacturer-sources\/run-all(?:\?|$)/,
     /\/api\/tracked-retailer-sources\/run(?:\?|$)/,
+    /\/api\/tracked-retailer-sources\/run-all(?:\?|$)/,
     /\/api\/jobs\/.*\/run(?:\?|$)/,
     /\/api\/retailers\/bowling-com\/parse-/,
     /\/api\/retailers\/cleanup-duplicates/,
@@ -2810,6 +2887,10 @@ loadListings();
 
       if (path.includes("/tracked-manufacturer-sources/run")) {
         return "manufacturer source run";
+      }
+
+      if (path.includes("/tracked-retailer-sources/run-all")) {
+        return "retailer run-all";
       }
 
       if (path.includes("/tracked-retailer-sources/run")) {
@@ -2996,5 +3077,68 @@ loadListings();
 
       throw error;
     }
+  };
+})();
+
+
+(function setupTrackedRetailerRunAllButtonV1() {
+  function bind() {
+    const btn = document.getElementById("runAllTrackedSourcesBtn");
+
+    if (!btn || btn.dataset.boundRunAll === "true") {
+      return;
+    }
+
+    btn.dataset.boundRunAll = "true";
+    btn.addEventListener("click", runAllTrackedSources);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bind);
+  } else {
+    bind();
+  }
+})();
+
+/* Add Delete buttons for disabled tracked retailer sources */
+(function setupTrackedRetailerDeleteButtonV1() {
+  if (window.__trackedRetailerDeleteButtonV1) return;
+  window.__trackedRetailerDeleteButtonV1 = true;
+
+  const originalRenderTrackedSources = window.renderTrackedSources || renderTrackedSources;
+
+  window.renderTrackedSources = function patchedRenderTrackedSources(data) {
+    originalRenderTrackedSources(data);
+
+    const rows = document.querySelectorAll("#trackedSourcesTable tbody tr");
+
+    rows.forEach((row) => {
+      const idText = row.querySelector(".muted")?.textContent?.trim();
+
+      if (!idText || row.querySelector(".delete-retailer-source-btn")) {
+        return;
+      }
+
+      const statusText = row.querySelector(".pill")?.textContent?.trim().toLowerCase();
+
+      if (statusText !== "disabled") {
+        return;
+      }
+
+      const actions = row.querySelector(".cell-actions");
+
+      if (!actions) {
+        return;
+      }
+
+      const button = document.createElement("button");
+      button.className = "danger delete-retailer-source-btn";
+      button.textContent = "Delete";
+      button.addEventListener("click", () => {
+        deleteTrackedSource(idText);
+      });
+
+      actions.appendChild(button);
+    });
   };
 })();

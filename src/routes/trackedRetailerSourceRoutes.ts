@@ -1,6 +1,8 @@
 import { Router } from "express";
 import {
+  deleteTrackedRetailerSource,
   getTrackedRetailerSources,
+  runEnabledTrackedRetailerSources,
   runTrackedRetailerSource,
   seedDefaultTrackedRetailerSources,
   setTrackedRetailerSourceEnabled,
@@ -130,6 +132,40 @@ trackedRetailerSourceRoutes.get("/run", async (req, res) => {
     res.status(500).json({
       error: "Failed to run tracked retailer source.",
       details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+
+trackedRetailerSourceRoutes.get("/run-all", async (_req, res) => {
+  try {
+    const data = await runEnabledTrackedRetailerSources();
+    res.json({ data });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to run enabled tracked retailer sources.",
+      details: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+trackedRetailerSourceRoutes.get("/delete", async (req, res) => {
+  try {
+    const id = getStringQuery(req.query.id);
+
+    if (!id) {
+      res.status(400).json({ error: "id is required." });
+      return;
+    }
+
+    const data = await deleteTrackedRetailerSource(id);
+    res.json({ data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+
+    res.status(message.includes("Disable the retailer source") ? 400 : 500).json({
+      error: "Failed to delete tracked retailer source.",
+      details: message,
     });
   }
 });

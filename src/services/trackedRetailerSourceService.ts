@@ -245,3 +245,65 @@ export async function runTrackedRetailerSource(id: string) {
     generatedAt: new Date().toISOString(),
   };
 }
+
+export async function runEnabledTrackedRetailerSources() {
+  const sources = await prisma.trackedRetailerSource.findMany({
+    where: { enabled: true },
+    orderBy: [{ retailerName: "asc" }, { name: "asc" }],
+  });
+
+  const results = [];
+
+  for (const source of sources) {
+    try {
+      const data = await runTrackedRetailerSource(source.id);
+      results.push({
+        source,
+        result: data.result,
+        status: "success",
+        error: null,
+      });
+    } catch (error) {
+      results.push({
+        source,
+        result: null,
+        status: "failed",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  const successfulCount = results.filter((item) => item.status === "success").length;
+  const failedCount = results.filter((item) => item.status === "failed").length;
+
+  return {
+    sourceCount: sources.length,
+    successfulCount,
+    failedCount,
+    results,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+export async function deleteTrackedRetailerSource(id: string) {
+  const source = await prisma.trackedRetailerSource.findUnique({
+    where: { id },
+  });
+
+  if (!source) {
+    throw new Error(`Tracked retailer source not found: ${id}`);
+  }
+
+  if (source.enabled) {
+    throw new Error("Disable the retailer source before deleting it.");
+  }
+
+  const deleted = await prisma.trackedRetailerSource.delete({
+    where: { id },
+  });
+
+  return {
+    data: deleted,
+    generatedAt: new Date().toISOString(),
+  };
+}
