@@ -3142,3 +3142,1223 @@ loadListings();
     });
   };
 })();
+
+/* Popup editor for tracked retailer sources */
+(function setupTrackedRetailerSourceEditModalV1() {
+  if (window.__trackedRetailerSourceEditModalV1) return;
+  window.__trackedRetailerSourceEditModalV1 = true;
+
+  function ensureModalStyles() {
+    if (document.getElementById("trackedRetailerEditModalStylesV1")) return;
+
+    const style = document.createElement("style");
+    style.id = "trackedRetailerEditModalStylesV1";
+    style.textContent = `
+      .tracked-source-edit-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        background: rgba(15, 23, 42, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .tracked-source-edit-backdrop.hidden {
+        display: none;
+      }
+
+      .tracked-source-edit-modal {
+        width: min(860px, 100%);
+        max-height: 90vh;
+        overflow: auto;
+        background: #ffffff;
+        color: #172033;
+        border: 1px solid #cbd5e1;
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+      }
+
+      .tracked-source-edit-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 22px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .tracked-source-edit-head h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .tracked-source-edit-body {
+        padding: 20px 22px;
+      }
+
+      .tracked-source-edit-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 16px 22px 22px;
+      }
+
+      .tracked-source-edit-note {
+        margin-bottom: 14px;
+        color: #475569;
+        font-size: 13px;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function ensureModal() {
+    ensureModalStyles();
+
+    let modal = document.getElementById("trackedRetailerEditModalV1");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "trackedRetailerEditModalV1";
+    modal.className = "tracked-source-edit-backdrop hidden";
+    modal.innerHTML = `
+      <div class="tracked-source-edit-modal" role="dialog" aria-modal="true">
+        <div class="tracked-source-edit-head">
+          <h3>Edit Retailer Source</h3>
+          <button type="button" class="secondary" id="trackedRetailerEditCloseBtnV1">Close</button>
+        </div>
+
+        <div class="tracked-source-edit-body">
+          <div class="tracked-source-edit-note" id="trackedRetailerEditNoteV1">
+            Edit this saved retailer source without changing the add-source form.
+          </div>
+
+          <input id="trackedRetailerEditOriginalIdV1" type="hidden" />
+
+          <div class="grid grid-3">
+            <div>
+              <label for="trackedRetailerEditNameV1">Source Name</label>
+              <input id="trackedRetailerEditNameV1" />
+            </div>
+            <div>
+              <label for="trackedRetailerEditRetailerNameV1">Retailer Name</label>
+              <input id="trackedRetailerEditRetailerNameV1" />
+            </div>
+            <div>
+              <label for="trackedRetailerEditKindV1">Source Kind</label>
+              <select id="trackedRetailerEditKindV1">
+                <option value="category">category</option>
+                <option value="product">product</option>
+              </select>
+            </div>
+            <div>
+              <label for="trackedRetailerEditEnabledV1">Enabled</label>
+              <select id="trackedRetailerEditEnabledV1">
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </div>
+            <div>
+              <label for="trackedRetailerEditAllowLikelyV1">Allow Likely Match</label>
+              <select id="trackedRetailerEditAllowLikelyV1">
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </div>
+            <div>
+              <label for="trackedRetailerEditDelayV1">Scrape Delay Ms</label>
+              <input id="trackedRetailerEditDelayV1" type="number" min="0" />
+            </div>
+            <div>
+              <label for="trackedRetailerEditMaxPagesV1">Max Pages</label>
+              <input id="trackedRetailerEditMaxPagesV1" type="number" min="0" />
+            </div>
+            <div>
+              <label for="trackedRetailerEditMaxProductsV1">Max Products</label>
+              <input id="trackedRetailerEditMaxProductsV1" type="number" min="0" />
+            </div>
+            <div>
+              <label for="trackedRetailerEditUrlV1">URL</label>
+              <input id="trackedRetailerEditUrlV1" />
+            </div>
+          </div>
+        </div>
+
+        <div class="tracked-source-edit-actions">
+          <button type="button" class="secondary" id="trackedRetailerEditCancelBtnV1">Cancel</button>
+          <button type="button" id="trackedRetailerEditSaveBtnV1">Save Changes</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("trackedRetailerEditCloseBtnV1")?.addEventListener("click", closeTrackedRetailerEditModal);
+    document.getElementById("trackedRetailerEditCancelBtnV1")?.addEventListener("click", closeTrackedRetailerEditModal);
+    document.getElementById("trackedRetailerEditSaveBtnV1")?.addEventListener("click", saveTrackedRetailerEditModal);
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        closeTrackedRetailerEditModal();
+      }
+    });
+
+    return modal;
+  }
+
+  function getModalValue(id) {
+    return document.getElementById(id)?.value?.trim() ?? "";
+  }
+
+  function setModalValue(id, value) {
+    const input = document.getElementById(id);
+    if (input) input.value = value ?? "";
+  }
+
+  function closeTrackedRetailerEditModal() {
+    ensureModal().classList.add("hidden");
+  }
+
+  async function saveTrackedRetailerEditModal() {
+    try {
+      const name = getModalValue("trackedRetailerEditNameV1");
+      const retailerName = getModalValue("trackedRetailerEditRetailerNameV1");
+      const sourceKind = getModalValue("trackedRetailerEditKindV1");
+      const url = getModalValue("trackedRetailerEditUrlV1");
+
+      if (!name || !retailerName || !sourceKind || !url) {
+        throw new Error("Source name, retailer name, source kind, and URL are required.");
+      }
+
+      const query = encodeQuery({
+        name,
+        retailerName,
+        sourceKind,
+        url,
+        enabled: getModalValue("trackedRetailerEditEnabledV1"),
+        maxPages: getModalValue("trackedRetailerEditMaxPagesV1"),
+        maxProducts: getModalValue("trackedRetailerEditMaxProductsV1"),
+        scrapeDelayMs: getModalValue("trackedRetailerEditDelayV1"),
+        allowLikelyMatch: getModalValue("trackedRetailerEditAllowLikelyV1"),
+      });
+
+      const data = await apiGet(`/api/tracked-retailer-sources/upsert?${query}`);
+
+      const summary = document.getElementById("trackedSourcesSummary");
+      if (summary) {
+        summary.textContent = `Updated tracked source: ${data.data?.name ?? name}.`;
+      }
+
+      closeTrackedRetailerEditModal();
+      await loadTrackedSources();
+      setStatus("Source saved", "ready");
+    } catch (error) {
+      const note = document.getElementById("trackedRetailerEditNoteV1");
+      if (note) {
+        note.textContent = `Edit error: ${error.message}`;
+      }
+
+      setStatus("Error", "error");
+    }
+  }
+
+  function openTrackedRetailerEditModal(sourceId) {
+    const source = getTrackedSourceById(sourceId);
+
+    if (!source) {
+      setStatus("Error", "error");
+      return;
+    }
+
+    ensureModal();
+
+    setModalValue("trackedRetailerEditOriginalIdV1", source.id);
+    setModalValue("trackedRetailerEditNameV1", source.name ?? "");
+    setModalValue("trackedRetailerEditRetailerNameV1", source.retailerName ?? "bowling.com");
+    setModalValue("trackedRetailerEditKindV1", source.sourceKind ?? "category");
+    setModalValue("trackedRetailerEditEnabledV1", String(source.enabled));
+    setModalValue("trackedRetailerEditAllowLikelyV1", String(source.allowLikelyMatch));
+    setModalValue("trackedRetailerEditDelayV1", source.scrapeDelayMs ?? 750);
+    setModalValue("trackedRetailerEditMaxPagesV1", source.maxPages ?? 1);
+    setModalValue("trackedRetailerEditMaxProductsV1", source.maxProducts ?? 5);
+    setModalValue("trackedRetailerEditUrlV1", source.url ?? "");
+
+    const note = document.getElementById("trackedRetailerEditNoteV1");
+    if (note) {
+      note.textContent = `Editing: ${source.name}`;
+    }
+
+    ensureModal().classList.remove("hidden");
+  }
+
+  window.editTrackedSource = openTrackedRetailerEditModal;
+  window.editTrackedSourceFromEncoded = function editTrackedSourceFromEncodedModal(encodedSourceId) {
+    openTrackedRetailerEditModal(decodeURIComponent(encodedSourceId));
+  };
+})();
+
+/* Popup editor for tracked manufacturer sources */
+(function setupTrackedManufacturerSourceEditModalV1() {
+  if (window.__trackedManufacturerSourceEditModalV1) return;
+  window.__trackedManufacturerSourceEditModalV1 = true;
+
+  function ensureModalStyles() {
+    if (document.getElementById("trackedManufacturerEditModalStylesV1")) return;
+
+    const style = document.createElement("style");
+    style.id = "trackedManufacturerEditModalStylesV1";
+    style.textContent = `
+      .manufacturer-source-edit-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        background: rgba(15, 23, 42, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .manufacturer-source-edit-backdrop.hidden {
+        display: none;
+      }
+
+      .manufacturer-source-edit-modal {
+        width: min(920px, 100%);
+        max-height: 90vh;
+        overflow: auto;
+        background: #ffffff;
+        color: #172033;
+        border: 1px solid #cbd5e1;
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+      }
+
+      .manufacturer-source-edit-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 22px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .manufacturer-source-edit-head h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .manufacturer-source-edit-body {
+        padding: 20px 22px;
+      }
+
+      .manufacturer-source-edit-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 16px 22px 22px;
+      }
+
+      .manufacturer-source-edit-note {
+        margin-bottom: 14px;
+        color: #475569;
+        font-size: 13px;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function ensureModal() {
+    ensureModalStyles();
+
+    let modal = document.getElementById("trackedManufacturerEditModalV1");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "trackedManufacturerEditModalV1";
+    modal.className = "manufacturer-source-edit-backdrop hidden";
+    modal.innerHTML = `
+      <div class="manufacturer-source-edit-modal" role="dialog" aria-modal="true">
+        <div class="manufacturer-source-edit-head">
+          <h3>Edit Manufacturer Source</h3>
+          <button type="button" class="secondary" id="trackedManufacturerEditCloseBtnV1">Close</button>
+        </div>
+
+        <div class="manufacturer-source-edit-body">
+          <div class="manufacturer-source-edit-note" id="trackedManufacturerEditNoteV1">
+            Edit this saved manufacturer source without changing the add-source form.
+          </div>
+
+          <input id="trackedManufacturerEditOriginalIdV1" type="hidden" />
+
+          <div class="grid grid-3">
+            <div>
+              <label for="trackedManufacturerEditNameV1">Source Name</label>
+              <input id="trackedManufacturerEditNameV1" />
+            </div>
+            <div>
+              <label for="trackedManufacturerEditManufacturerNameV1">Manufacturer Name</label>
+              <input id="trackedManufacturerEditManufacturerNameV1" />
+            </div>
+            <div>
+              <label for="trackedManufacturerEditBrandNameV1">Brand Name</label>
+              <input id="trackedManufacturerEditBrandNameV1" />
+            </div>
+            <div>
+              <label for="trackedManufacturerEditKindV1">Source Kind</label>
+              <select id="trackedManufacturerEditKindV1">
+                <option value="catalog">catalog</option>
+                <option value="lineup">lineup</option>
+                <option value="product">product</option>
+              </select>
+            </div>
+            <div>
+              <label for="trackedManufacturerEditParserKeyV1">Parser Key</label>
+              <select id="trackedManufacturerEditParserKeyV1">
+                <option value="motiv">motiv</option>
+                <option value="storm">storm</option>
+                <option value="roto-grip">roto-grip</option>
+                <option value="900-global">900-global</option>
+                <option value="brunswick">brunswick</option>
+                <option value="radical">radical</option>
+                <option value="dv8">dv8</option>
+                <option value="hammer">hammer</option>
+                <option value="ebonite">ebonite</option>
+                <option value="track">track</option>
+                <option value="generic">generic</option>
+              </select>
+            </div>
+            <div>
+              <label for="trackedManufacturerEditEnabledV1">Enabled</label>
+              <select id="trackedManufacturerEditEnabledV1">
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </div>
+            <div>
+              <label for="trackedManufacturerEditMaxPagesV1">Max Pages</label>
+              <input id="trackedManufacturerEditMaxPagesV1" type="number" min="0" />
+            </div>
+            <div>
+              <label for="trackedManufacturerEditMaxProductsV1">Max Products</label>
+              <input id="trackedManufacturerEditMaxProductsV1" type="number" min="0" />
+            </div>
+            <div>
+              <label for="trackedManufacturerEditDelayV1">Scrape Delay Ms</label>
+              <input id="trackedManufacturerEditDelayV1" type="number" min="0" />
+            </div>
+            <div style="grid-column: 1 / -1">
+              <label for="trackedManufacturerEditUrlV1">Official Source URL</label>
+              <input id="trackedManufacturerEditUrlV1" />
+            </div>
+          </div>
+        </div>
+
+        <div class="manufacturer-source-edit-actions">
+          <button type="button" class="secondary" id="trackedManufacturerEditCancelBtnV1">Cancel</button>
+          <button type="button" id="trackedManufacturerEditSaveBtnV1">Save Changes</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("trackedManufacturerEditCloseBtnV1")?.addEventListener("click", closeTrackedManufacturerEditModal);
+    document.getElementById("trackedManufacturerEditCancelBtnV1")?.addEventListener("click", closeTrackedManufacturerEditModal);
+    document.getElementById("trackedManufacturerEditSaveBtnV1")?.addEventListener("click", saveTrackedManufacturerEditModal);
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        closeTrackedManufacturerEditModal();
+      }
+    });
+
+    return modal;
+  }
+
+  function getModalValue(id) {
+    return document.getElementById(id)?.value?.trim() ?? "";
+  }
+
+  function setModalValue(id, value) {
+    const input = document.getElementById(id);
+    if (input) input.value = value ?? "";
+  }
+
+  function closeTrackedManufacturerEditModal() {
+    ensureModal().classList.add("hidden");
+  }
+
+  async function saveTrackedManufacturerEditModal() {
+    try {
+      const name = getModalValue("trackedManufacturerEditNameV1");
+      const manufacturerName = getModalValue("trackedManufacturerEditManufacturerNameV1");
+      const brandName = getModalValue("trackedManufacturerEditBrandNameV1");
+      const sourceKind = getModalValue("trackedManufacturerEditKindV1");
+      const parserKey = getModalValue("trackedManufacturerEditParserKeyV1");
+      const url = getModalValue("trackedManufacturerEditUrlV1");
+
+      if (!name || !manufacturerName || !sourceKind || !parserKey || !url) {
+        throw new Error("Source name, manufacturer name, source kind, parser key, and URL are required.");
+      }
+
+      const query = encodeQuery({
+        name,
+        manufacturerName,
+        brandName,
+        sourceKind,
+        parserKey,
+        url,
+        enabled: getModalValue("trackedManufacturerEditEnabledV1"),
+        maxPages: getModalValue("trackedManufacturerEditMaxPagesV1"),
+        maxProducts: getModalValue("trackedManufacturerEditMaxProductsV1"),
+        scrapeDelayMs: getModalValue("trackedManufacturerEditDelayV1"),
+      });
+
+      const data = await apiGet(`/api/tracked-manufacturer-sources/upsert?${query}`);
+
+      const summary = document.getElementById("manufacturerSourcesSummary");
+      if (summary) {
+        summary.textContent = `Updated manufacturer source: ${data.data?.name ?? name}.`;
+      }
+
+      closeTrackedManufacturerEditModal();
+      await loadManufacturerSources();
+      setStatus("Manufacturer source saved", "ready");
+    } catch (error) {
+      const note = document.getElementById("trackedManufacturerEditNoteV1");
+      if (note) {
+        note.textContent = `Edit error: ${error.message}`;
+      }
+
+      setStatus("Error", "error");
+    }
+  }
+
+  function openTrackedManufacturerEditModal(sourceId) {
+    const source = getManufacturerSourceById(sourceId);
+
+    if (!source) {
+      setStatus("Error", "error");
+      return;
+    }
+
+    ensureModal();
+
+    setModalValue("trackedManufacturerEditOriginalIdV1", source.id);
+    setModalValue("trackedManufacturerEditNameV1", source.name ?? "");
+    setModalValue("trackedManufacturerEditManufacturerNameV1", source.manufacturerName ?? "");
+    setModalValue("trackedManufacturerEditBrandNameV1", source.brandName ?? "");
+    setModalValue("trackedManufacturerEditKindV1", source.sourceKind ?? "catalog");
+    setModalValue("trackedManufacturerEditParserKeyV1", source.parserKey ?? "motiv");
+    setModalValue("trackedManufacturerEditEnabledV1", String(source.enabled));
+    setModalValue("trackedManufacturerEditMaxPagesV1", source.maxPages ?? 1);
+    setModalValue("trackedManufacturerEditMaxProductsV1", source.maxProducts ?? 50);
+    setModalValue("trackedManufacturerEditDelayV1", source.scrapeDelayMs ?? 750);
+    setModalValue("trackedManufacturerEditUrlV1", source.url ?? "");
+
+    const note = document.getElementById("trackedManufacturerEditNoteV1");
+    if (note) {
+      note.textContent = `Editing: ${source.name}`;
+    }
+
+    ensureModal().classList.remove("hidden");
+  }
+
+  window.editManufacturerSource = openTrackedManufacturerEditModal;
+  window.editManufacturerSourceFromEncoded = function editManufacturerSourceFromEncodedModal(encodedSourceId) {
+    openTrackedManufacturerEditModal(decodeURIComponent(encodedSourceId));
+  };
+})();
+
+/* Popup editor for tracked manufacturer sources */
+(function setupTrackedManufacturerSourceEditModalV1() {
+  if (window.__trackedManufacturerSourceEditModalV1) return;
+  window.__trackedManufacturerSourceEditModalV1 = true;
+
+  function ensureModalStyles() {
+    if (document.getElementById("trackedManufacturerEditModalStylesV1")) return;
+
+    const style = document.createElement("style");
+    style.id = "trackedManufacturerEditModalStylesV1";
+    style.textContent = `
+      .manufacturer-source-edit-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        background: rgba(15, 23, 42, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .manufacturer-source-edit-backdrop.hidden {
+        display: none;
+      }
+
+      .manufacturer-source-edit-modal {
+        width: min(920px, 100%);
+        max-height: 90vh;
+        overflow: auto;
+        background: #ffffff;
+        color: #172033;
+        border: 1px solid #cbd5e1;
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+      }
+
+      .manufacturer-source-edit-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 22px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .manufacturer-source-edit-head h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .manufacturer-source-edit-body {
+        padding: 20px 22px;
+      }
+
+      .manufacturer-source-edit-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 16px 22px 22px;
+      }
+
+      .manufacturer-source-edit-note {
+        margin-bottom: 14px;
+        color: #475569;
+        font-size: 13px;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function ensureModal() {
+    ensureModalStyles();
+
+    let modal = document.getElementById("trackedManufacturerEditModalV1");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "trackedManufacturerEditModalV1";
+    modal.className = "manufacturer-source-edit-backdrop hidden";
+    modal.innerHTML = `
+      <div class="manufacturer-source-edit-modal" role="dialog" aria-modal="true">
+        <div class="manufacturer-source-edit-head">
+          <h3>Edit Manufacturer Source</h3>
+          <button type="button" class="secondary" id="trackedManufacturerEditCloseBtnV1">Close</button>
+        </div>
+
+        <div class="manufacturer-source-edit-body">
+          <div class="manufacturer-source-edit-note" id="trackedManufacturerEditNoteV1">
+            Edit this saved manufacturer source without changing the add-source form.
+          </div>
+
+          <input id="trackedManufacturerEditOriginalIdV1" type="hidden" />
+
+          <div class="grid grid-3">
+            <div>
+              <label for="trackedManufacturerEditNameV1">Source Name</label>
+              <input id="trackedManufacturerEditNameV1" />
+            </div>
+            <div>
+              <label for="trackedManufacturerEditManufacturerNameV1">Manufacturer Name</label>
+              <input id="trackedManufacturerEditManufacturerNameV1" />
+            </div>
+            <div>
+              <label for="trackedManufacturerEditBrandNameV1">Brand Name</label>
+              <input id="trackedManufacturerEditBrandNameV1" />
+            </div>
+            <div>
+              <label for="trackedManufacturerEditKindV1">Source Kind</label>
+              <select id="trackedManufacturerEditKindV1">
+                <option value="catalog">catalog</option>
+                <option value="lineup">lineup</option>
+                <option value="product">product</option>
+              </select>
+            </div>
+            <div>
+              <label for="trackedManufacturerEditParserKeyV1">Parser Key</label>
+              <select id="trackedManufacturerEditParserKeyV1">
+                <option value="motiv">motiv</option>
+                <option value="storm">storm</option>
+                <option value="roto-grip">roto-grip</option>
+                <option value="900-global">900-global</option>
+                <option value="brunswick">brunswick</option>
+                <option value="radical">radical</option>
+                <option value="dv8">dv8</option>
+                <option value="hammer">hammer</option>
+                <option value="ebonite">ebonite</option>
+                <option value="track">track</option>
+                <option value="generic">generic</option>
+              </select>
+            </div>
+            <div>
+              <label for="trackedManufacturerEditEnabledV1">Enabled</label>
+              <select id="trackedManufacturerEditEnabledV1">
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </div>
+            <div>
+              <label for="trackedManufacturerEditMaxPagesV1">Max Pages</label>
+              <input id="trackedManufacturerEditMaxPagesV1" type="number" min="0" />
+            </div>
+            <div>
+              <label for="trackedManufacturerEditMaxProductsV1">Max Products</label>
+              <input id="trackedManufacturerEditMaxProductsV1" type="number" min="0" />
+            </div>
+            <div>
+              <label for="trackedManufacturerEditDelayV1">Scrape Delay Ms</label>
+              <input id="trackedManufacturerEditDelayV1" type="number" min="0" />
+            </div>
+            <div style="grid-column: 1 / -1">
+              <label for="trackedManufacturerEditUrlV1">Official Source URL</label>
+              <input id="trackedManufacturerEditUrlV1" />
+            </div>
+          </div>
+        </div>
+
+        <div class="manufacturer-source-edit-actions">
+          <button type="button" class="secondary" id="trackedManufacturerEditCancelBtnV1">Cancel</button>
+          <button type="button" id="trackedManufacturerEditSaveBtnV1">Save Changes</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("trackedManufacturerEditCloseBtnV1")?.addEventListener("click", closeTrackedManufacturerEditModal);
+    document.getElementById("trackedManufacturerEditCancelBtnV1")?.addEventListener("click", closeTrackedManufacturerEditModal);
+    document.getElementById("trackedManufacturerEditSaveBtnV1")?.addEventListener("click", saveTrackedManufacturerEditModal);
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        closeTrackedManufacturerEditModal();
+      }
+    });
+
+    return modal;
+  }
+
+  function getModalValue(id) {
+    return document.getElementById(id)?.value?.trim() ?? "";
+  }
+
+  function setModalValue(id, value) {
+    const input = document.getElementById(id);
+    if (input) input.value = value ?? "";
+  }
+
+  function closeTrackedManufacturerEditModal() {
+    ensureModal().classList.add("hidden");
+  }
+
+  async function saveTrackedManufacturerEditModal() {
+    try {
+      const name = getModalValue("trackedManufacturerEditNameV1");
+      const manufacturerName = getModalValue("trackedManufacturerEditManufacturerNameV1");
+      const brandName = getModalValue("trackedManufacturerEditBrandNameV1");
+      const sourceKind = getModalValue("trackedManufacturerEditKindV1");
+      const parserKey = getModalValue("trackedManufacturerEditParserKeyV1");
+      const url = getModalValue("trackedManufacturerEditUrlV1");
+
+      if (!name || !manufacturerName || !sourceKind || !parserKey || !url) {
+        throw new Error("Source name, manufacturer name, source kind, parser key, and URL are required.");
+      }
+
+      const query = encodeQuery({
+        name,
+        manufacturerName,
+        brandName,
+        sourceKind,
+        parserKey,
+        url,
+        enabled: getModalValue("trackedManufacturerEditEnabledV1"),
+        maxPages: getModalValue("trackedManufacturerEditMaxPagesV1"),
+        maxProducts: getModalValue("trackedManufacturerEditMaxProductsV1"),
+        scrapeDelayMs: getModalValue("trackedManufacturerEditDelayV1"),
+      });
+
+      const data = await apiGet(`/api/tracked-manufacturer-sources/upsert?${query}`);
+
+      const summary = document.getElementById("manufacturerSourcesSummary");
+      if (summary) {
+        summary.textContent = `Updated manufacturer source: ${data.data?.name ?? name}.`;
+      }
+
+      closeTrackedManufacturerEditModal();
+      await loadManufacturerSources();
+      setStatus("Manufacturer source saved", "ready");
+    } catch (error) {
+      const note = document.getElementById("trackedManufacturerEditNoteV1");
+      if (note) {
+        note.textContent = `Edit error: ${error.message}`;
+      }
+
+      setStatus("Error", "error");
+    }
+  }
+
+  function openTrackedManufacturerEditModal(sourceId) {
+    const source = getManufacturerSourceById(sourceId);
+
+    if (!source) {
+      setStatus("Error", "error");
+      return;
+    }
+
+    ensureModal();
+
+    setModalValue("trackedManufacturerEditOriginalIdV1", source.id);
+    setModalValue("trackedManufacturerEditNameV1", source.name ?? "");
+    setModalValue("trackedManufacturerEditManufacturerNameV1", source.manufacturerName ?? "");
+    setModalValue("trackedManufacturerEditBrandNameV1", source.brandName ?? "");
+    setModalValue("trackedManufacturerEditKindV1", source.sourceKind ?? "catalog");
+    setModalValue("trackedManufacturerEditParserKeyV1", source.parserKey ?? "motiv");
+    setModalValue("trackedManufacturerEditEnabledV1", String(source.enabled));
+    setModalValue("trackedManufacturerEditMaxPagesV1", source.maxPages ?? 1);
+    setModalValue("trackedManufacturerEditMaxProductsV1", source.maxProducts ?? 50);
+    setModalValue("trackedManufacturerEditDelayV1", source.scrapeDelayMs ?? 750);
+    setModalValue("trackedManufacturerEditUrlV1", source.url ?? "");
+
+    const note = document.getElementById("trackedManufacturerEditNoteV1");
+    if (note) {
+      note.textContent = `Editing: ${source.name}`;
+    }
+
+    ensureModal().classList.remove("hidden");
+  }
+
+  window.editManufacturerSource = openTrackedManufacturerEditModal;
+  window.editManufacturerSourceFromEncoded = function editManufacturerSourceFromEncodedModal(encodedSourceId) {
+    openTrackedManufacturerEditModal(decodeURIComponent(encodedSourceId));
+  };
+})();
+
+/* Force manufacturer source Edit buttons to use popup modal */
+(function forceManufacturerEditPopupBindingV1() {
+  if (window.__forceManufacturerEditPopupBindingV1) return;
+  window.__forceManufacturerEditPopupBindingV1 = true;
+
+  function getManufacturerSourceIdFromEditButton(button) {
+    const onclick = button.getAttribute("onclick") ?? "";
+    const encodedMatch = onclick.match(/editManufacturerSourceFromEncoded\('([^']+)'\)/);
+
+    if (encodedMatch?.[1]) {
+      return decodeURIComponent(encodedMatch[1]);
+    }
+
+    const row = button.closest("tr");
+    const mutedTexts = Array.from(row?.querySelectorAll(".muted") ?? [])
+      .map((node) => node.textContent?.trim())
+      .filter(Boolean);
+
+    const idText = mutedTexts.find((text) =>
+      text.startsWith("manufacturer-source-")
+    );
+
+    return idText ?? "";
+  }
+
+  function isManufacturerEditButton(button) {
+    if (!(button instanceof HTMLButtonElement)) return false;
+
+    const onclick = button.getAttribute("onclick") ?? "";
+    const text = button.textContent?.trim().toLowerCase();
+
+    return (
+      text === "edit" &&
+      (
+        onclick.includes("editManufacturerSource") ||
+        button.closest("#manufacturerSourcesTable")
+      )
+    );
+  }
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const button = event.target?.closest?.("button");
+
+      if (!isManufacturerEditButton(button)) {
+        return;
+      }
+
+      const sourceId = getManufacturerSourceIdFromEditButton(button);
+
+      if (!sourceId) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      if (typeof window.editManufacturerSource === "function") {
+        window.editManufacturerSource(sourceId);
+      } else if (typeof editManufacturerSource === "function") {
+        editManufacturerSource(sourceId);
+      }
+    },
+    true
+  );
+})();
+
+/* V2 manufacturer source edit popup: overrides old inline edit behavior */
+(function setupManufacturerSourceEditPopupV2() {
+  if (window.__manufacturerSourceEditPopupV2) return;
+  window.__manufacturerSourceEditPopupV2 = true;
+
+  function ensureStyles() {
+    if (document.getElementById("manufacturerSourceEditPopupStylesV2")) return;
+
+    const style = document.createElement("style");
+    style.id = "manufacturerSourceEditPopupStylesV2";
+    style.textContent = `
+      .manufacturer-edit-v2-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 11000;
+        background: rgba(15, 23, 42, 0.58);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .manufacturer-edit-v2-backdrop.hidden {
+        display: none;
+      }
+
+      .manufacturer-edit-v2-modal {
+        width: min(920px, 100%);
+        max-height: 90vh;
+        overflow: auto;
+        background: #ffffff;
+        color: #172033;
+        border: 1px solid #cbd5e1;
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+      }
+
+      .manufacturer-edit-v2-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 22px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .manufacturer-edit-v2-head h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .manufacturer-edit-v2-body {
+        padding: 20px 22px;
+      }
+
+      .manufacturer-edit-v2-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 16px 22px 22px;
+      }
+
+      .manufacturer-edit-v2-note {
+        margin-bottom: 14px;
+        color: #475569;
+        font-size: 13px;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function ensureModal() {
+    ensureStyles();
+
+    let modal = document.getElementById("manufacturerSourceEditPopupV2");
+    if (modal) return modal;
+
+    modal = document.createElement("div");
+    modal.id = "manufacturerSourceEditPopupV2";
+    modal.className = "manufacturer-edit-v2-backdrop hidden";
+    modal.innerHTML = `
+      <div class="manufacturer-edit-v2-modal" role="dialog" aria-modal="true">
+        <div class="manufacturer-edit-v2-head">
+          <h3>Edit Manufacturer Source</h3>
+          <button type="button" class="secondary" id="manufacturerEditV2CloseBtn">Close</button>
+        </div>
+
+        <div class="manufacturer-edit-v2-body">
+          <div class="manufacturer-edit-v2-note" id="manufacturerEditV2Note">
+            Edit this saved manufacturer source without changing the add-source form.
+          </div>
+
+          <input id="manufacturerEditV2OriginalId" type="hidden" />
+
+          <div class="grid grid-3">
+            <div>
+              <label for="manufacturerEditV2Name">Source Name</label>
+              <input id="manufacturerEditV2Name" />
+            </div>
+            <div>
+              <label for="manufacturerEditV2ManufacturerName">Manufacturer Name</label>
+              <input id="manufacturerEditV2ManufacturerName" />
+            </div>
+            <div>
+              <label for="manufacturerEditV2BrandName">Brand Name</label>
+              <input id="manufacturerEditV2BrandName" />
+            </div>
+            <div>
+              <label for="manufacturerEditV2Kind">Source Kind</label>
+              <select id="manufacturerEditV2Kind">
+                <option value="catalog">catalog</option>
+                <option value="lineup">lineup</option>
+                <option value="product">product</option>
+              </select>
+            </div>
+            <div>
+              <label for="manufacturerEditV2ParserKey">Parser Key</label>
+              <select id="manufacturerEditV2ParserKey">
+                <option value="motiv">motiv</option>
+                <option value="storm">storm</option>
+                <option value="roto-grip">roto-grip</option>
+                <option value="900-global">900-global</option>
+                <option value="brunswick">brunswick</option>
+                <option value="radical">radical</option>
+                <option value="dv8">dv8</option>
+                <option value="hammer">hammer</option>
+                <option value="ebonite">ebonite</option>
+                <option value="track">track</option>
+                <option value="generic">generic</option>
+              </select>
+            </div>
+            <div>
+              <label for="manufacturerEditV2Enabled">Enabled</label>
+              <select id="manufacturerEditV2Enabled">
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            </div>
+            <div>
+              <label for="manufacturerEditV2MaxPages">Max Pages</label>
+              <input id="manufacturerEditV2MaxPages" type="number" min="0" />
+            </div>
+            <div>
+              <label for="manufacturerEditV2MaxProducts">Max Products</label>
+              <input id="manufacturerEditV2MaxProducts" type="number" min="0" />
+            </div>
+            <div>
+              <label for="manufacturerEditV2Delay">Scrape Delay Ms</label>
+              <input id="manufacturerEditV2Delay" type="number" min="0" />
+            </div>
+            <div style="grid-column: 1 / -1">
+              <label for="manufacturerEditV2Url">Official Source URL</label>
+              <input id="manufacturerEditV2Url" />
+            </div>
+          </div>
+        </div>
+
+        <div class="manufacturer-edit-v2-actions">
+          <button type="button" class="secondary" id="manufacturerEditV2CancelBtn">Cancel</button>
+          <button type="button" id="manufacturerEditV2SaveBtn">Save Changes</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("manufacturerEditV2CloseBtn")?.addEventListener("click", closeModal);
+    document.getElementById("manufacturerEditV2CancelBtn")?.addEventListener("click", closeModal);
+    document.getElementById("manufacturerEditV2SaveBtn")?.addEventListener("click", saveModal);
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeModal();
+    });
+
+    return modal;
+  }
+
+  function getValue(id) {
+    return document.getElementById(id)?.value?.trim() ?? "";
+  }
+
+  function setValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value ?? "";
+  }
+
+  function closeModal() {
+    ensureModal().classList.add("hidden");
+  }
+
+  async function findSource(sourceId) {
+    let source = null;
+
+    try {
+      if (typeof getManufacturerSourceById === "function") {
+        source = getManufacturerSourceById(sourceId);
+      }
+    } catch {
+      source = null;
+    }
+
+    if (source) return source;
+
+    const data = await apiGet("/api/tracked-manufacturer-sources");
+    const sources = data.data ?? [];
+
+    try {
+      if (Array.isArray(lastManufacturerSources)) {
+        lastManufacturerSources = sources;
+      }
+    } catch {
+      // Ignore if the state variable is not writable in this scope.
+    }
+
+    return sources.find((item) => item.id === sourceId) ?? null;
+  }
+
+  async function openModal(sourceId) {
+    try {
+      const source = await findSource(sourceId);
+
+      if (!source) {
+        throw new Error(`Manufacturer source not found: ${sourceId}`);
+      }
+
+      ensureModal();
+
+      setValue("manufacturerEditV2OriginalId", source.id);
+      setValue("manufacturerEditV2Name", source.name ?? "");
+      setValue("manufacturerEditV2ManufacturerName", source.manufacturerName ?? "");
+      setValue("manufacturerEditV2BrandName", source.brandName ?? "");
+      setValue("manufacturerEditV2Kind", source.sourceKind ?? "catalog");
+      setValue("manufacturerEditV2ParserKey", source.parserKey ?? "motiv");
+      setValue("manufacturerEditV2Enabled", String(source.enabled));
+      setValue("manufacturerEditV2MaxPages", source.maxPages ?? 1);
+      setValue("manufacturerEditV2MaxProducts", source.maxProducts ?? 50);
+      setValue("manufacturerEditV2Delay", source.scrapeDelayMs ?? 750);
+      setValue("manufacturerEditV2Url", source.url ?? "");
+
+      const note = document.getElementById("manufacturerEditV2Note");
+      if (note) {
+        note.textContent = `Editing: ${source.name}`;
+      }
+
+      ensureModal().classList.remove("hidden");
+    } catch (error) {
+      const summary = document.getElementById("manufacturerSourcesSummary");
+      if (summary) {
+        summary.textContent = `Edit source error: ${error.message}`;
+      }
+
+      setStatus("Error", "error");
+    }
+  }
+
+  async function saveModal() {
+    try {
+      const name = getValue("manufacturerEditV2Name");
+      const manufacturerName = getValue("manufacturerEditV2ManufacturerName");
+      const brandName = getValue("manufacturerEditV2BrandName");
+      const sourceKind = getValue("manufacturerEditV2Kind");
+      const parserKey = getValue("manufacturerEditV2ParserKey");
+      const url = getValue("manufacturerEditV2Url");
+
+      if (!name || !manufacturerName || !sourceKind || !parserKey || !url) {
+        throw new Error("Source name, manufacturer name, source kind, parser key, and URL are required.");
+      }
+
+      const query = encodeQuery({
+        name,
+        manufacturerName,
+        brandName,
+        sourceKind,
+        parserKey,
+        url,
+        enabled: getValue("manufacturerEditV2Enabled"),
+        maxPages: getValue("manufacturerEditV2MaxPages"),
+        maxProducts: getValue("manufacturerEditV2MaxProducts"),
+        scrapeDelayMs: getValue("manufacturerEditV2Delay"),
+      });
+
+      const data = await apiGet(`/api/tracked-manufacturer-sources/upsert?${query}`);
+
+      const summary = document.getElementById("manufacturerSourcesSummary");
+      if (summary) {
+        summary.textContent = `Updated manufacturer source: ${data.data?.name ?? name}.`;
+      }
+
+      closeModal();
+      await loadManufacturerSources();
+      setStatus("Manufacturer source saved", "ready");
+    } catch (error) {
+      const note = document.getElementById("manufacturerEditV2Note");
+      if (note) {
+        note.textContent = `Edit error: ${error.message}`;
+      }
+
+      setStatus("Error", "error");
+    }
+  }
+
+  function getSourceIdFromButton(button) {
+    const onclick = button.getAttribute("onclick") ?? "";
+    const match = onclick.match(/editManufacturerSourceFromEncoded\('([^']+)'\)/);
+
+    if (match?.[1]) {
+      return decodeURIComponent(match[1]);
+    }
+
+    const row = button.closest("tr");
+    return Array.from(row?.querySelectorAll(".muted") ?? [])
+      .map((node) => node.textContent?.trim())
+      .find((text) => text?.startsWith("manufacturer-source-")) ?? "";
+  }
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const button = event.target?.closest?.("button");
+
+      if (!(button instanceof HTMLButtonElement)) return;
+      if (!button.closest("#manufacturerSourcesTable")) return;
+      if (button.textContent?.trim().toLowerCase() !== "edit") return;
+
+      const sourceId = getSourceIdFromButton(button);
+
+      if (!sourceId) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      openModal(sourceId);
+    },
+    true
+  );
+
+  window.editManufacturerSource = openModal;
+  window.editManufacturerSourceFromEncoded = function editManufacturerSourceFromEncodedV2(encodedSourceId) {
+    openModal(decodeURIComponent(encodedSourceId));
+  };
+})();
