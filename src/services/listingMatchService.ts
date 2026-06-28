@@ -10,6 +10,7 @@ export interface ListingMatchCandidate {
   coverstockType: string;
   coreName: string | null;
   coreType: string;
+  isCurrent: boolean;
   confidence: number;
   matchStatus: MatchStatus;
   reasons: string[];
@@ -233,6 +234,7 @@ export async function matchRetailerListingTitle(
         coverstockType: ball.coverstockType,
         coreName: ball.coreName,
         coreType: ball.coreType,
+        isCurrent: ball.isCurrent,
         confidence,
         matchStatus: statusFromConfidence(confidence),
         reasons,

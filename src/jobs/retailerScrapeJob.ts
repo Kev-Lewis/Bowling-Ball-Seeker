@@ -27,6 +27,73 @@ export interface BowlingComCategoryScrapeJobOptions
   maxProducts?: number;
 }
 
+function normalizeRetailerTitleForLegacy(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[™®©]/g, "")
+    .replace(/[^a-z0-9#./\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeLegacyRetailerBall(listingTitle: string) {
+  const normalized = normalizeRetailerTitleForLegacy(listingTitle);
+
+  const legacyFamilyWords = [
+    "spare",
+    "pixel",
+    "liberty",
+    "stadium",
+    "crest",
+    "velocity",
+    "ascend",
+    "thrill",
+  ];
+
+  const hasLegacyFamilyWord = legacyFamilyWords.some((word) =>
+    normalized.includes(word)
+  );
+
+  const hasBrand = /\b(motiv|storm|roto grip|900 global|brunswick|hammer|ebonite|track|radical|dv8)\b/.test(
+    normalized
+  );
+
+  const hasBallLikeTerm = /\b(pearl|solid|hybrid|spare|urethane|reactive)\b/.test(
+    normalized
+  );
+
+  return hasBrand && (hasLegacyFamilyWord || hasBallLikeTerm);
+}
+
+function isLegacyCandidate(candidate: ListingMatchCandidate | undefined) {
+  return Boolean(candidate && candidate.isCurrent === false);
+}
+
+function getLegacyReviewReason(
+  listingTitle: string,
+  candidate: ListingMatchCandidate | undefined
+) {
+  const normalized = normalizeRetailerTitleForLegacy(listingTitle);
+
+  if (candidate?.isCurrent === false) {
+    return "inactive_catalog_candidate";
+  }
+
+  if (!candidate) {
+    return "retailer_only_legacy_or_discontinued";
+  }
+
+  if (/\b(spare|pixel)\b/.test(normalized)) {
+    return "current_family_spare_or_colorway_variant";
+  }
+
+  if (/\b(ascend|thrill|venom|jackal|primal)\b/.test(normalized)) {
+    return "weak_current_family_variant";
+  }
+
+  return "legacy_review";
+}
+
 async function processScrapedRetailerListing(
   listing: ScrapedRetailerListing,
   options: RetailerScrapeJobOptions
@@ -38,13 +105,48 @@ async function processScrapedRetailerListing(
     currentOnly: true,
   });
 
-  const topMatch = matchResult.data[0];
+  let topMatch = matchResult.data[0];
+  let matches = matchResult.data;
+  let legacyMatchResult: Awaited<ReturnType<typeof matchRetailerListingTitle>> | null =
+    null;
+
+  if (!topMatch || topMatch.confidence < 65) {
+    legacyMatchResult = await matchRetailerListingTitle(listing.listingTitle, {
+      limit: 5,
+      minConfidence: options.minConfidence ?? 35,
+      includeRejected: false,
+      currentOnly: false,
+    });
+
+    const inactiveMatches = legacyMatchResult.data.filter((candidate) => {
+      return candidate.isCurrent === false;
+    });
+
+    const legacyTopMatch = inactiveMatches[0] ?? null;
+
+    if (!topMatch && legacyTopMatch) {
+      topMatch = legacyTopMatch;
+      matches = legacyMatchResult.data;
+    }
+  }
+
+  const shouldLegacyReview =
+    isLegacyCandidate(topMatch) ||
+    (!topMatch && looksLikeLegacyRetailerBall(listing.listingTitle)) ||
+    (topMatch?.matchStatus === "manual_review" &&
+      looksLikeLegacyRetailerBall(listing.listingTitle));
+
+  const legacyReviewReason = shouldLegacyReview
+    ? getLegacyReviewReason(listing.listingTitle, topMatch)
+    : null;
 
   if (!topMatch) {
     return {
-      status: "skipped_no_match",
+      status: shouldLegacyReview ? "skipped_legacy_review" : "skipped_no_match",
       listing,
-      matches: matchResult.data,
+      legacyReviewReason,
+      matches,
+      legacyMatches: legacyMatchResult?.data ?? [],
     };
   }
 
@@ -55,10 +157,12 @@ async function processScrapedRetailerListing(
 
   if (!canSave) {
     return {
-      status: "skipped_needs_review",
+      status: shouldLegacyReview ? "skipped_legacy_review" : "skipped_needs_review",
       listing,
+      legacyReviewReason,
       selectedMatch: topMatch,
-      matches: matchResult.data,
+      matches,
+      legacyMatches: legacyMatchResult?.data ?? [],
     };
   }
 
@@ -80,7 +184,7 @@ async function processScrapedRetailerListing(
     listing,
     selectedMatch: topMatch,
     upsert,
-    matches: matchResult.data,
+    matches,
   };
 }
 
@@ -94,6 +198,8 @@ function summarizeMatchCandidate(candidate: ListingMatchCandidate) {
     canonicalName: candidate.canonicalName,
     brand: candidate.brand,
     manufacturer: candidate.manufacturer,
+    isCurrent: candidate.isCurrent,
+    catalogState: candidate.isCurrent ? "current" : "legacy",
     confidence: candidate.confidence,
     matchStatus: candidate.matchStatus,
     reasons: candidate.reasons,
@@ -107,7 +213,8 @@ function buildSkippedListingReviews(
     .filter((result) => {
       return (
         result.status === "skipped_no_match" ||
-        result.status === "skipped_needs_review"
+        result.status === "skipped_needs_review" ||
+        result.status === "skipped_legacy_review"
       );
     })
     .map((result) => {
@@ -116,8 +223,12 @@ function buildSkippedListingReviews(
           ? summarizeMatchCandidate(result.selectedMatch)
           : null;
 
+      const legacyReviewReason =
+        "legacyReviewReason" in result ? result.legacyReviewReason : null;
+
       return {
         status: result.status,
+        legacyReviewReason,
         listing: {
           retailerName: result.listing.retailerName,
           listingTitle: result.listing.listingTitle,
@@ -128,7 +239,7 @@ function buildSkippedListingReviews(
         },
         selectedMatch,
         matchCount: result.matches.length,
-        topMatches: result.matches.slice(0, 5).map((match) => {
+        topMatches: result.matches.slice(0, 5).map((match: ListingMatchCandidate) => {
           return summarizeMatchCandidate(match);
         }),
       };
@@ -152,6 +263,14 @@ function countSkippedNeedsReviewResults(
 ) {
   return results.filter((result) => {
     return result.status === "skipped_needs_review";
+  }).length;
+}
+
+function countSkippedLegacyReviewResults(
+  results: RetailerScrapeProcessingResult[]
+) {
+  return results.filter((result) => {
+    return result.status === "skipped_legacy_review";
   }).length;
 }
 
@@ -239,6 +358,7 @@ export async function runMockRetailerScrapeJob(
     const savedCount = countSavedResults(results);
     const skippedNoMatchCount = countSkippedNoMatchResults(results);
     const skippedNeedsReviewCount = countSkippedNeedsReviewResults(results);
+    const skippedLegacyReviewCount = countSkippedLegacyReviewResults(results);
     const createdListingCount = countCreatedListings(results);
     const updatedListingCount = countUpdatedListings(results);
     const snapshotCreatedCount = countCreatedSnapshots(results);
@@ -256,6 +376,7 @@ export async function runMockRetailerScrapeJob(
       savedCount,
       skippedNoMatchCount,
       skippedNeedsReviewCount,
+      skippedLegacyReviewCount,
       createdListingCount,
       updatedListingCount,
       snapshotCreatedCount,
@@ -275,6 +396,7 @@ export async function runMockRetailerScrapeJob(
         savedCount,
         skippedNoMatchCount,
         skippedNeedsReviewCount,
+        skippedLegacyReviewCount,
         createdListingCount,
         updatedListingCount,
         snapshotCreatedCount,
@@ -337,6 +459,7 @@ export async function runBowlingComProductScrapeJob(
     const savedCount = countSavedResults(results);
     const skippedNoMatchCount = countSkippedNoMatchResults(results);
     const skippedNeedsReviewCount = countSkippedNeedsReviewResults(results);
+    const skippedLegacyReviewCount = countSkippedLegacyReviewResults(results);
     const createdListingCount = countCreatedListings(results);
     const updatedListingCount = countUpdatedListings(results);
     const snapshotCreatedCount = countCreatedSnapshots(results);
@@ -355,6 +478,7 @@ export async function runBowlingComProductScrapeJob(
       savedCount,
       skippedNoMatchCount,
       skippedNeedsReviewCount,
+      skippedLegacyReviewCount,
       createdListingCount,
       updatedListingCount,
       snapshotCreatedCount,
@@ -375,6 +499,7 @@ export async function runBowlingComProductScrapeJob(
         savedCount,
         skippedNoMatchCount,
         skippedNeedsReviewCount,
+        skippedLegacyReviewCount,
         createdListingCount,
         updatedListingCount,
         snapshotCreatedCount,
@@ -455,6 +580,7 @@ export async function runBowlingComCategoryScrapeJob(
     const savedCount = countSavedResults(results);
     const skippedNoMatchCount = countSkippedNoMatchResults(results);
     const skippedNeedsReviewCount = countSkippedNeedsReviewResults(results);
+    const skippedLegacyReviewCount = countSkippedLegacyReviewResults(results);
     const createdListingCount = countCreatedListings(results);
     const updatedListingCount = countUpdatedListings(results);
     const snapshotCreatedCount = countCreatedSnapshots(results);
@@ -475,6 +601,7 @@ export async function runBowlingComCategoryScrapeJob(
       savedCount,
       skippedNoMatchCount,
       skippedNeedsReviewCount,
+      skippedLegacyReviewCount,
       createdListingCount,
       updatedListingCount,
       snapshotCreatedCount,
@@ -502,6 +629,7 @@ export async function runBowlingComCategoryScrapeJob(
         savedCount,
         skippedNoMatchCount,
         skippedNeedsReviewCount,
+        skippedLegacyReviewCount,
         createdListingCount,
         updatedListingCount,
         snapshotCreatedCount,
