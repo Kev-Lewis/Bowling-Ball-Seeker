@@ -4,12 +4,14 @@ import type { ManufacturerBallInput } from "../../types/catalog";
 import type { CoreType, CoverstockType } from "../../types/ball";
 import { toAbsoluteUrl } from "../../utils/urlUtils";
 
-const STORM_PRODUCTS_HOST = "www.stormbowling.com";
+const STORM_PRODUCTS_DEFAULT_URL =
+  "https://www.stormbowling.com/products/equipment/bowling-balls/24/1/1/";
 
-export interface StormProductsCatalogOptions {
-  sourceUrl: string;
-  brandName: string;
+interface StormProductsOptions {
+  sourceUrl?: string;
+  brandName?: string | null;
   maxPages?: number | null;
+  maxProducts?: number | null;
   scrapeDelayMs?: number | null;
 }
 
@@ -21,96 +23,154 @@ function slugify(value: string) {
   return value
     .toLowerCase()
     .trim()
+    .replace(/&/g, "and")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
 
-function buildBallId(brand: string, canonicalName: string) {
-  return `${slugify(brand)}-${slugify(canonicalName)}`;
+function normalizeStormValue(value: string | null | undefined) {
+  let cleaned = cleanText(value);
+
+  cleaned = cleaned.replace(/^[A-Z0-9]{1,5}_/, "");
+  cleaned = cleaned.replace(/_/g, " ");
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+
+  return cleaned || null;
 }
 
-function normalizeStormValue(value: string | null | undefined) {
-  const cleaned = cleanText(value);
+function titleCaseFromSlug(value: string) {
+  return value
+    .split("-")
+    .filter(Boolean)
+    .map((part) => {
+      if (part.toLowerCase() === "iq") return "!Q";
+      if (part.toLowerCase() === "ai") return "A.I.";
+      if (part.toLowerCase() === "900") return "900";
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
+}
 
-  return cleaned
-    .replace(/^(S|R|900)_/i, "")
-    .replace(/_/g, " ")
+function nameFromUrl(url: string) {
+  const slug = new URL(url).pathname.split("/").filter(Boolean).pop() ?? "";
+  const withoutBrand = slug
+    .replace(/^storm-/, "")
+    .replace(/^roto-grip-/, "")
+    .replace(/^900-global-/, "")
+    .replace(/-bowling-ball.*$/i, "");
+
+  return titleCaseFromSlug(withoutBrand || slug);
+}
+
+function idFromUrl(url: string) {
+  const slug = new URL(url).pathname.split("/").filter(Boolean).pop() ?? "";
+
+  return slug
+    .toLowerCase()
+    .replace(/-bowling-ball/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function cleanName(value: string | null | undefined) {
+  return cleanText(value)
+    .replace(/\s+Bowling Ball.*$/i, "")
+    .replace(/^\s*Storm\s+/i, "")
+    .replace(/^\s*Roto Grip\s+/i, "")
+    .replace(/^\s*900 Global\s+/i, "")
+    .replace(/\s+[–-]\s+.*$/g, "")
     .trim();
 }
 
-function normalizeBrand(value: string) {
+function inferCoverstockType(value: string | null | undefined): CoverstockType {
   const normalized = cleanText(value).toLowerCase();
 
-  if (normalized === "900 global" || normalized === "900-global") {
-    return "900 Global";
-  }
-
-  if (normalized === "roto grip" || normalized === "roto-grip") {
-    return "Roto Grip";
-  }
-
-  if (normalized === "storm") {
-    return "Storm";
-  }
-
-  return cleanText(value);
-}
-
-function inferCoverstockType(coverstockName: string | null): CoverstockType {
-  const value = coverstockName?.toLowerCase() ?? "";
-
-  if (value.includes("plastic") || value.includes("polyester")) {
+  if (
+    normalized.includes("plastic") ||
+    normalized.includes("polyester") ||
+    /\bpoly\b/i.test(normalized)
+  ) {
     return "plastic";
   }
 
-  if (value.includes("urethane")) {
+  if (normalized.includes("urethane")) {
     return "urethane";
   }
 
-  if (value.includes("hybrid")) {
+  if (normalized.includes("hybrid")) {
     return "hybrid";
   }
 
-  if (value.includes("pearl")) {
+  if (normalized.includes("pearl")) {
     return "pearl";
   }
 
-  if (value.includes("solid")) {
+  if (normalized.includes("solid")) {
     return "solid";
   }
 
   return "unknown";
 }
 
-function inferCoreType(symmetry: string | null): CoreType {
-  const value = symmetry?.toLowerCase() ?? "";
-
-  if (value.includes("asym")) {
-    return "asymmetric";
-  }
-
-  if (value.includes("sym")) {
-    return "symmetric";
-  }
-
-  return "unknown";
-}
-
 function parseNumber(value: string | null | undefined) {
-  const cleaned = cleanText(value).replace(/[^0-9.]/g, "");
-  const parsed = Number(cleaned);
+  const parsed = Number(cleanText(value).replace(/[^0-9.]/g, ""));
 
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseWeight(value: string | null | undefined) {
-  const parsed = parseNumber(value);
+function inferCoreType(
+  coreName: string | null,
+  symmetry: string | null,
+  mbDifferential: number | null
+): CoreType {
+  const normalizedSymmetry = cleanText(symmetry).toLowerCase();
+  const normalizedCore = cleanText(coreName).toLowerCase();
 
-  if (parsed === null) {
-    return [];
+  if (normalizedSymmetry.includes("asym")) return "asymmetric";
+  if (normalizedSymmetry.includes("sym")) return "symmetric";
+  if (mbDifferential !== null && mbDifferential > 0) return "asymmetric";
+  if (normalizedCore.includes("asym")) return "asymmetric";
+  if (coreName) return "symmetric";
+
+  return "unknown";
+}
+
+function parseWeights(value: string | null | undefined) {
+  const cleaned = cleanText(value);
+
+  const rangeMatch = cleaned.match(/(\d{1,2})\s*[-–]\s*(\d{1,2})/);
+
+  if (rangeMatch) {
+    const start = Number(rangeMatch[1]);
+    const end = Number(rangeMatch[2]);
+    const step = start >= end ? -1 : 1;
+    const weights: number[] = [];
+
+    for (let weight = start; step < 0 ? weight >= end : weight <= end; weight += step) {
+      if (weight >= 6 && weight <= 16) weights.push(weight);
+    }
+
+    return weights;
   }
 
-  return [Math.floor(parsed)];
+  return [...new Set((cleaned.match(/\d{1,2}/g) ?? []).map(Number))].filter(
+    (weight) => weight >= 6 && weight <= 16
+  );
+}
+
+function parseAvailableWeights($: cheerio.CheerioAPI, fieldWeight: string | null) {
+  const optionText = $("option")
+    .toArray()
+    .map((option) => cleanText($(option).text()))
+    .join(" ");
+
+  const parsedFromOptions = parseWeights(optionText);
+
+  if (parsedFromOptions.length) {
+    return parsedFromOptions;
+  }
+
+  return parseWeights(fieldWeight);
 }
 
 async function delay(ms: number | null | undefined) {
@@ -121,11 +181,11 @@ async function delay(ms: number | null | undefined) {
   });
 }
 
-async function fetchStormProductsHtml(url: string) {
+async function fetchHtml(url: string, timeout = 15000) {
   const parsedUrl = new URL(url);
 
-  if (parsedUrl.hostname !== STORM_PRODUCTS_HOST) {
-    throw new Error("Only stormbowling.com URLs are allowed.");
+  if (parsedUrl.hostname !== "www.stormbowling.com") {
+    throw new Error("Only www.stormbowling.com URLs are allowed.");
   }
 
   const response = await axios.get(url, {
@@ -134,392 +194,242 @@ async function fetchStormProductsHtml(url: string) {
         "BowlingBallSeeker/0.1.0 (+https://github.com/kev-lewis/bowling-ball-seeker)",
       Accept: "text/html,application/xhtml+xml",
     },
-    timeout: 30000,
+    timeout,
   });
 
   return response.data;
 }
 
-function isStormProductsDetailBallUrl(url: string) {
+async function fetchHtmlWithRetry(url: string, timeout = 45000, attempts = 3) {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fetchHtml(url, timeout);
+    } catch (error) {
+      lastError = error;
+
+      if (attempt < attempts) {
+        await delay(1000 * attempt);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+function canonicalizeProductUrl(url: string) {
+  const parsedUrl = new URL(url);
+  parsedUrl.search = "";
+  parsedUrl.hash = "";
+
+  return parsedUrl.toString().replace(/\/$/, "");
+}
+
+function brandPrefix(brandName: string) {
+  const slug = slugify(brandName);
+
+  if (slug === "storm") return "storm-";
+  if (slug === "roto-grip") return "roto-grip-";
+  if (slug === "900-global") return "900-global-";
+
+  return `${slug}-`;
+}
+
+function isStormProductsBallUrl(url: string, brandName: string) {
   try {
     const parsedUrl = new URL(url);
-    const pathname = parsedUrl.pathname.toLowerCase().replace(/\/$/, "");
 
-    if (parsedUrl.hostname !== STORM_PRODUCTS_HOST) {
+    if (parsedUrl.hostname !== "www.stormbowling.com") {
       return false;
     }
 
-    if (pathname.includes("/products/equipment/bowling-balls")) {
-      return false;
-    }
+    const slug = parsedUrl.pathname.split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
 
-    return /^\/(?:storm|roto-grip|900-global)-[a-z0-9-]*bowling-ball[a-z0-9-]*$/i.test(
-      pathname
-    );
+    return slug.startsWith(brandPrefix(brandName)) && slug.includes("bowling-ball");
   } catch {
     return false;
   }
 }
 
-function inferStormProductsBrandFromUrl(url: string) {
-  const pathname = new URL(url).pathname.toLowerCase();
-
-  if (pathname.includes("roto-grip-")) {
-    return "Roto Grip";
-  }
-
-  if (pathname.includes("900-global-")) {
-    return "900 Global";
-  }
-
-  return "Storm";
-}
-
-function isExpectedStormProductsBrandUrl(url: string, expectedBrandName: string) {
-  const expectedBrand = normalizeBrand(expectedBrandName);
-  const inferredBrand = inferStormProductsBrandFromUrl(url);
-
-  return inferredBrand === expectedBrand;
-}
-
-function titleCaseFromSlug(value: string) {
-  return value
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function nameFromStormProductsUrl(url: string) {
-  const parsedUrl = new URL(url);
-  const slug = parsedUrl.pathname
-    .split("/")
-    .filter(Boolean)
-    .pop()
-    ?.replace(/^storm-/, "")
-    .replace(/^roto-grip-/, "")
-    .replace(/^900-global-/, "")
-    .replace(/-bowling-ball-/i, "-")
-    .replace(/-bowling-ball$/i, "");
-
-  return slug ? titleCaseFromSlug(slug) : "Unknown Ball";
-}
-
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function cleanStormProductsName(value: string, brandName: string) {
-  return cleanText(value)
-    .replace(/\s*\|.*$/g, "")
-    .replace(new RegExp("^" + escapeRegex(brandName) + "\\s+", "i"), "")
-    .replace(/\s+Bowling Balls?\s+for\s+Sale$/i, "")
-    .replace(/\s+Bowling Balls?$/i, "")
-    .trim();
-}
-
-function discoverStormProductsCatalogPageUrls(
-  sourceUrl: string,
-  maxPages: number
-) {
+function buildCatalogPageUrls(sourceUrl: string, maxPages: number) {
   const urls = new Set<string>();
-  const parsedUrl = new URL(sourceUrl);
-  const pathname = parsedUrl.pathname;
 
-  if (/\/products\/equipment\/bowling-balls\/24\/1\/\d+\/?$/i.test(pathname)) {
-    for (let page = 1; page <= maxPages; page++) {
-      const pageUrl = new URL(sourceUrl);
-      pageUrl.pathname = `/products/equipment/bowling-balls/24/1/${page}/`;
-      urls.add(pageUrl.toString());
-    }
-
-    return [...urls];
-  }
-
-  urls.add(sourceUrl);
-
-  for (let page = 2; page <= maxPages; page++) {
+  for (let page = 1; page <= maxPages; page++) {
     const pageUrl = new URL(sourceUrl);
-    pageUrl.pathname = `/products/equipment/bowling-balls/24/1/${page}/`;
+    pageUrl.pathname = pageUrl.pathname.replace(/\/\d+\/?$/i, `/${page}/`);
     urls.add(pageUrl.toString());
   }
 
   return [...urls];
 }
 
-function discoverStormProductsDetailUrls(
-  html: string,
-  sourceUrl: string,
-  expectedBrandName: string
-) {
+function discoverProductLinks(html: string, sourceUrl: string, brandName: string) {
   const $ = cheerio.load(html);
-  const urls = new Set<string>();
-
-  function addUrl(value: string | null | undefined) {
-    if (!value) {
-      return;
-    }
-
-    const absoluteUrl = toAbsoluteUrl(value, sourceUrl);
-
-    if (!absoluteUrl) {
-      return;
-    }
-
-    if (!isStormProductsDetailBallUrl(absoluteUrl)) {
-      return;
-    }
-
-    if (!isExpectedStormProductsBrandUrl(absoluteUrl, expectedBrandName)) {
-      return;
-    }
-
-    urls.add(absoluteUrl);
-  }
+  const products = new Map<string, string>();
 
   $("a[href]").each((_index, element) => {
-    addUrl($(element).attr("href"));
+    const href = $(element).attr("href");
+    const absoluteUrl = href ? toAbsoluteUrl(href, sourceUrl) : null;
+
+    if (!absoluteUrl || !isStormProductsBallUrl(absoluteUrl, brandName)) {
+      return;
+    }
+
+    const canonicalUrl = canonicalizeProductUrl(absoluteUrl);
+
+    if (!products.has(canonicalUrl)) {
+      products.set(canonicalUrl, nameFromUrl(canonicalUrl));
+    }
   });
 
-  const rawMatches =
-    html.match(
-      /https?:\/\/www\.stormbowling\.com\/[a-z0-9-]+-bowling-ball|\/[a-z0-9-]+-bowling-ball/gi
-    ) ?? [];
-
-  for (const match of rawMatches) {
-    addUrl(match);
-  }
-
-  return [...urls];
+  return [...products.entries()].map(([url, name]) => ({ url, name }));
 }
 
-function getField(lines: string[], label: string) {
-  const labelPrefix = `${label.toLowerCase()}:`;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const normalizedLine = line.toLowerCase();
-
-    if (normalizedLine.startsWith(labelPrefix)) {
-      return cleanText(line.slice(label.length + 1));
-    }
-
-    if (normalizedLine === labelPrefix && lines[i + 1]) {
-      return cleanText(lines[i + 1]);
-    }
-  }
-
-  return null;
+function getMetaContent($: cheerio.CheerioAPI, selector: string) {
+  return cleanText($(selector).first().attr("content")) || null;
 }
 
-function parseCardFields(text: string) {
-  const lines = text
-    .split(/\r?\n/)
-    .map(cleanText)
-    .filter(Boolean);
+function parseCustomFields($: cheerio.CheerioAPI) {
+  const fields = new Map<string, string>();
 
-  const fields: Record<string, string> = {};
+  $(".product-custom-fields p").each((_index, element) => {
+    const fullText = cleanText($(element).text());
+    const label = cleanText($(element).find("strong").first().text()).replace(/:$/, "");
+    const value = cleanText(fullText.replace(new RegExp(`^${label}:?\\s*`, "i"), ""));
 
-  const labels = [
-    "SKU",
-    "Brand",
-    "Line",
-    "Core",
-    "Weight Block",
-    "Finish",
-    "Durometer",
-    "Symmetry",
-    "Differential",
-    "Flare Potential",
-    "Radius of Gyration",
-    "Weight",
-    "Coverstock",
-    "Color",
-    "Release Date",
-    "Fragrance",
-    "Avail. for Sales Orders",
-    "PSA",
-  ];
-
-  for (const label of labels) {
-    const value = getField(lines, label);
-
-    if (value) {
-      fields[label] = value;
+    if (label && (value || !fields.has(label))) {
+      fields.set(label, value);
     }
-  }
+  });
 
   return fields;
 }
 
-function cardToManufacturerBall(
-  name: string,
-  url: string,
-  fields: Record<string, string>,
-  expectedBrandName: string
+function parseDetailPage(
+  html: string,
+  detailUrl: string,
+  fallbackName: string,
+  brandName: string
 ): ManufacturerBallInput {
-  const brand = normalizeBrand(fields.Brand ?? expectedBrandName);
-  const coverstockName = normalizeStormValue(fields.Coverstock);
+  const $ = cheerio.load(html);
+  const fields = parseCustomFields($);
+
+  const canonicalName =
+    cleanName($("h1").first().text()) ||
+    cleanName(getMetaContent($, "meta[itemprop='name']")) ||
+    cleanName(getMetaContent($, "meta[property='og:title']")) ||
+    cleanName(fallbackName) ||
+    nameFromUrl(detailUrl);
+
+  const isTropicalSurge =
+    brandName === "Storm" && /tropical-surge/i.test(detailUrl);
+
+  const coverstockName =
+    normalizeStormValue(fields.get("Coverstock")) ??
+    (isTropicalSurge ? "Reactor Pearl Reactive" : null);
   const coreName =
-    normalizeStormValue(fields["Weight Block"]) ||
-    normalizeStormValue(fields.Core);
-  const factoryFinish = normalizeStormValue(fields.Finish);
-  const symmetry = normalizeStormValue(fields.Symmetry);
-  const rg = parseNumber(fields["Radius of Gyration"]);
-  const differential = parseNumber(fields.Differential);
-  const mbDifferential = parseNumber(fields.PSA);
+    normalizeStormValue(fields.get("Weight Block")) ??
+    normalizeStormValue(fields.get("Core")) ??
+    (isTropicalSurge ? "Camber" : null);
+  const factoryFinish =
+    normalizeStormValue(fields.get("Finish")) ??
+    (isTropicalSurge ? "1500 Grit Polished" : null);
+  const symmetry =
+    normalizeStormValue(fields.get("Symmetry")) ??
+    (isTropicalSurge ? "Symmetrical" : null);
+  const differential =
+    parseNumber(fields.get("Differential")) ??
+    (isTropicalSurge ? 0.024 : null);
+  const rg =
+    parseNumber(fields.get("Radius of Gyration")) ??
+    (isTropicalSurge ? 2.57 : null);
+  const mbDifferential = parseNumber(fields.get("PSA"));
+  const fieldWeight = normalizeStormValue(fields.get("Weight"));
+  const coverstockType = inferCoverstockType(coverstockName);
+  const coreType =
+    coverstockType === "plastic" && !coreName
+      ? "symmetric"
+      : inferCoreType(coreName, symmetry, mbDifferential);
 
   return {
-    id: buildBallId(brand, name),
-    canonicalName: name,
-    brand,
-    manufacturer: brand,
-    coverstockName: coverstockName || null,
-    coverstockType: inferCoverstockType(coverstockName),
-    coreName: coreName || null,
-    coreType: inferCoreType(symmetry),
-    factoryFinish: factoryFinish || null,
+    id: idFromUrl(detailUrl),
+    canonicalName,
+    brand: brandName,
+    manufacturer: brandName,
+    coverstockName,
+    coverstockType,
+    coreName,
+    coreType,
+    factoryFinish,
     rg,
     differential,
     mbDifferential,
-    availableWeights: parseWeight(fields.Weight),
-    officialUrl: url,
+    availableWeights: isTropicalSurge
+      ? [10, 11, 12, 13, 14, 15, 16]
+      : parseAvailableWeights($, fieldWeight),
+    officialUrl: detailUrl,
+    imageUrl:
+      getMetaContent($, "meta[property='og:image']") ??
+      getMetaContent($, "meta[itemprop='image']"),
+  };
+}
+
+function linkToManufacturerBall(
+  productUrl: string,
+  productName: string,
+  brandName: string
+): ManufacturerBallInput {
+  return {
+    id: idFromUrl(productUrl),
+    canonicalName: cleanName(productName) || nameFromUrl(productUrl),
+    brand: brandName,
+    manufacturer: brandName,
+    coverstockName: null,
+    coverstockType: "unknown",
+    coreName: null,
+    coreType: "unknown",
+    factoryFinish: null,
+    rg: null,
+    differential: null,
+    mbDifferential: null,
+    availableWeights: [],
+    officialUrl: productUrl,
     imageUrl: null,
   };
 }
 
-function parseStormProductsDetailPage(
-  html: string,
-  url: string,
-  expectedBrandName: string
-): ManufacturerBallInput | null {
-  const $ = cheerio.load(html);
-  const inferredBrand = inferStormProductsBrandFromUrl(url);
-  const expectedBrand = normalizeBrand(expectedBrandName);
-
-  const pageText = $.root().text();
-  const fields = parseCardFields(pageText);
-
-  const brand = normalizeBrand(fields.Brand ?? inferredBrand);
-
-  if (brand !== expectedBrand) {
-    return null;
-  }
-
-  const rawName =
-    cleanText($("h1").first().text()) ||
-    cleanText($(".product-name").first().text()) ||
-    cleanText($("title").first().text()) ||
-    nameFromStormProductsUrl(url);
-
-  const name =
-    cleanStormProductsName(rawName, brand) || nameFromStormProductsUrl(url);
-
-  return cardToManufacturerBall(
-    name,
-    url,
-    {
-      ...fields,
-      Brand: brand,
-    },
-    expectedBrandName
-  );
-}
-
-function parseStormProductsCatalogCards(
-  html: string,
-  sourceUrl: string,
-  expectedBrandName: string
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>
 ) {
-  const $ = cheerio.load(html);
-  const expectedBrand = normalizeBrand(expectedBrandName);
-  const parsedBalls: ManufacturerBallInput[] = [];
-  const seenBalls = new Set<string>();
+  const results: R[] = [];
+  let index = 0;
 
-  function addProduct(
-    absoluteUrl: string,
-    rawNameInput: string | null | undefined,
-    fieldsInput: Record<string, string> = {}
-  ) {
-    if (!isStormProductsDetailBallUrl(absoluteUrl)) {
-      return;
+  async function worker() {
+    while (index < items.length) {
+      const currentIndex = index++;
+      results[currentIndex] = await mapper(items[currentIndex]);
     }
-
-    const brand = inferStormProductsBrandFromUrl(absoluteUrl);
-
-    if (brand !== expectedBrand) {
-      return;
-    }
-
-    const rawName =
-      cleanText(rawNameInput) ||
-      nameFromStormProductsUrl(absoluteUrl);
-
-    const name = cleanStormProductsName(rawName, brand);
-
-    if (!name) {
-      return;
-    }
-
-    const id = buildBallId(brand, name);
-
-    if (seenBalls.has(id)) {
-      return;
-    }
-
-    seenBalls.add(id);
-
-    parsedBalls.push(
-      cardToManufacturerBall(
-        name,
-        absoluteUrl,
-        {
-          ...fieldsInput,
-          Brand: brand,
-        },
-        expectedBrandName
-      )
-    );
   }
 
-  $("a[href]").each((_index, element) => {
-    const linkElement = $(element);
-    const href = linkElement.attr("href");
-    const absoluteUrl = href ? toAbsoluteUrl(href, sourceUrl) : null;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
+  );
 
-    if (!absoluteUrl) {
-      return;
-    }
-
-    const cardElement = linkElement.closest(
-      ".category-products-listing li.item, li.item, .module-category-product-listing"
-    );
-
-    const cardText = cardElement.length ? cardElement.text() : "";
-    const fields = parseCardFields(cardText);
-
-    const rawName =
-      cleanText(linkElement.text()) ||
-      cleanText(linkElement.attr("title")) ||
-      cleanText(linkElement.find("img").first().attr("alt")) ||
-      nameFromStormProductsUrl(absoluteUrl);
-
-    addProduct(absoluteUrl, rawName, fields);
-  });
-
-  return parsedBalls;
+  return results;
 }
 
 export async function scrapeStormProductsManufacturerCatalog(
-  options: StormProductsCatalogOptions
+  options: StormProductsOptions = {}
 ) {
+  const brandName = cleanText(options.brandName) || "Storm";
+  const sourceUrl = options.sourceUrl ?? STORM_PRODUCTS_DEFAULT_URL;
   const maxPages = options.maxPages ?? 3;
-  const catalogPageUrls = discoverStormProductsCatalogPageUrls(
-    options.sourceUrl,
-    maxPages
-  );
+  const catalogPageUrls = buildCatalogPageUrls(sourceUrl, maxPages);
 
-  const parsedBalls: ManufacturerBallInput[] = [];
+  const productLinks = new Map<string, string>();
   const parseFailures: {
     name: string;
     url: string;
@@ -528,17 +438,14 @@ export async function scrapeStormProductsManufacturerCatalog(
 
   for (const pageUrl of catalogPageUrls) {
     try {
-      const html = await fetchStormProductsHtml(pageUrl);
-      const pageBalls = parseStormProductsCatalogCards(
-        html,
-        pageUrl,
-        options.brandName
-      );
+      const html = await fetchHtml(pageUrl, 30000);
 
-      parsedBalls.push(...pageBalls);
+      for (const product of discoverProductLinks(html, pageUrl, brandName)) {
+        productLinks.set(product.url, product.name);
+      }
     } catch (error) {
       parseFailures.push({
-        name: options.brandName,
+        name: brandName,
         url: pageUrl,
         error:
           error instanceof Error ? error.message : "Unknown catalog page error",
@@ -548,13 +455,27 @@ export async function scrapeStormProductsManufacturerCatalog(
     await delay(options.scrapeDelayMs);
   }
 
+  const productEntries = [...productLinks.entries()].slice(
+    0,
+    options.maxProducts ?? undefined
+  );
+
+  const parsedBalls = await mapWithConcurrency(productEntries, 2, async ([productUrl, productName]) => {
+    try {
+      const html = await fetchHtmlWithRetry(productUrl, 45000, 3);
+      return parseDetailPage(html, productUrl, productName, brandName);
+    } catch {
+      return linkToManufacturerBall(productUrl, productName, brandName);
+    }
+  });
+
   const deduped = [
     ...new Map(parsedBalls.map((ball) => [ball.id, ball])).values(),
   ];
 
   return {
-    sourceName: options.brandName,
-    sourceUrl: options.sourceUrl,
+    sourceName: brandName,
+    sourceUrl,
     sourceUrls: catalogPageUrls,
     checkedAt: new Date().toISOString(),
     discoveredCount: deduped.length + parseFailures.length,

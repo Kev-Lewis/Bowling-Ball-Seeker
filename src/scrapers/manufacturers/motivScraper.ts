@@ -119,33 +119,44 @@ function getTableValue(
 }
 
 function parseBallNameFromTitle(title: string | null) {
-  if (!title) {
+  const cleaned = cleanText(title ?? "");
+
+  if (!cleaned) {
     return null;
   }
 
-  return title.split("|")[0]?.trim() || null;
+  if (/^MOTIV\s*\|\s*Designer Balls/i.test(cleaned)) {
+    return "Designer Series";
+  }
+
+  return cleaned
+    .split("|")[0]
+    .replace(/\s+Bowling Balls? for Sale$/i, "")
+    .replace(/\s+Bowling Balls?$/i, "")
+    .replace(/\s+MOTIV Bowling$/i, "")
+    .trim() || null;
 }
 
 function inferCoverstockType(coverstockName: string | null): CoverstockType {
-  const value = coverstockName?.toLowerCase() ?? "";
+  const normalized = cleanText(coverstockName ?? "").toLowerCase();
 
-  if (value.includes("plastic") || value.includes("polyester")) {
+  if (normalized.includes("polyester") || normalized.includes("plastic")) {
     return "plastic";
   }
 
-  if (value.includes("urethane")) {
+  if (normalized.includes("urethane")) {
     return "urethane";
   }
 
-  if (value.includes("hybrid")) {
+  if (normalized.includes("hybrid")) {
     return "hybrid";
   }
 
-  if (value.includes("pearl")) {
+  if (normalized.includes("pearl") || normalized.includes("hfp")) {
     return "pearl";
   }
 
-  if (value.includes("solid")) {
+  if (normalized.includes("solid") || normalized.includes("hfs")) {
     return "solid";
   }
 
@@ -219,20 +230,40 @@ function parseNumber(value: string | undefined) {
 }
 
 function parseWeightSpecs(textBlocks: string[]): WeightSpec[] {
-  const combinedText = textBlocks.join(" ");
+  const text = cleanText(textBlocks.join(" "));
 
-  const regex =
-    /(\d{2})#?\s*Radius of Gyration\s*([.]?\d+(?:\.\d+)?)\s*Max Differential\s*([.]?\d+(?:\.\d+)?)(?:\s*Int\.?\s*Differential\s*([.]?\d+(?:\.\d+)?))?/gi;
+  function parseDecimal(raw: string | undefined) {
+    const value = cleanText(raw ?? "");
+
+    if (!value) {
+      return null;
+    }
+
+    if (value.startsWith(".")) {
+      const parsed = Number("0" + value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    if (/^\d{2,3}$/.test(value)) {
+      const parsed = Number("0." + value.padStart(3, "0"));
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    const parsed = Number(value.replace(/[^0-9.]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
 
   const specs: WeightSpec[] = [];
+  const pattern =
+    /(\d{2})\s*Radius of Gyration\s*(\d+\.\d+)\s*Max Differential\s*(\.?\d{2,3}|\d+\.\d+)(?:\s*Int\. Differential\s*(\.?\d{2,3}|\d+\.\d+))?/gi;
 
-  for (const match of combinedText.matchAll(regex)) {
-    const weight = parseNumber(match[1]);
-    const rg = parseNumber(match[2]);
-    const differential = parseNumber(match[3]);
-    const mbDifferential = parseNumber(match[4]);
+  for (const match of text.matchAll(pattern)) {
+    const weight = Number(match[1]);
+    const rg = parseDecimal(match[2]);
+    const differential = parseDecimal(match[3]);
+    const mbDifferential = parseDecimal(match[4]);
 
-    if (weight === null || rg === null || differential === null) {
+    if (!Number.isFinite(weight) || rg === null || differential === null) {
       continue;
     }
 
@@ -359,6 +390,24 @@ export async function inspectMotivBallPage(url: string) {
   return inspectHtmlPage("Motiv", url, html);
 }
 
+function applyMotivSpecialFallbacks(ball: any) {
+  if (
+    ball.brand === "Motiv" &&
+    ball.canonicalName === "Designer Series" &&
+    ball.officialUrl === "https://www.motivbowling.com/n_2320"
+  ) {
+    return {
+      ...ball,
+      coverstockName: ball.coverstockName ?? "Polyester",
+      coverstockType: "plastic",
+      coreName: ball.coreName ?? "Pancake",
+      coreType: "symmetric",
+    };
+  }
+
+  return ball;
+}
+
 export async function parseMotivBallPage(
   url: string
 ): Promise<ManufacturerBallInput> {
@@ -376,6 +425,13 @@ export async function parseMotivBallPage(
   const factoryFinish = getTableValue(inspection.tableRows, "Finish");
   const weightRange = getTableValue(inspection.tableRows, "Weight Range");
 
+  const isDesignerSeries =
+    canonicalName === "Designer Series" &&
+    url === "https://www.motivbowling.com/n_2320";
+
+  const finalCoverstockName = isDesignerSeries ? "Polyester" : coverstockName;
+  const finalCoreName = isDesignerSeries ? "Pancake" : coreName;
+
   const weightSpecs = parseWeightSpecs(inspection.textBlocks);
   const referenceSpec = chooseReferenceWeightSpec(weightSpecs);
 
@@ -388,7 +444,7 @@ export async function parseMotivBallPage(
     coverstockType: inferCoverstockType(coverstockName),
     coreName,
     coreType: inferCoreType(
-        coreName,
+        finalCoreName,
         inspection.headings,
         referenceSpec?.mbDifferential ?? null
     ),
@@ -400,6 +456,24 @@ export async function parseMotivBallPage(
     officialUrl: url,
     imageUrl: null,
   };
+}
+
+function normalizeMotivCatalogBall(ball: ManufacturerBallInput): ManufacturerBallInput {
+  if (
+    ball.brand === "Motiv" &&
+    ball.canonicalName === "Designer Series" &&
+    ball.officialUrl === "https://www.motivbowling.com/n_2320"
+  ) {
+    return {
+      ...ball,
+      coverstockName: "Polyester",
+      coverstockType: "plastic",
+      coreName: "Pancake",
+      coreType: "symmetric",
+    };
+  }
+
+  return ball;
 }
 
 export async function scrapeMotivManufacturerCatalog(sourceUrl = MOTIV_BALL_GUIDE_URL) {
@@ -415,7 +489,7 @@ export async function scrapeMotivManufacturerCatalog(sourceUrl = MOTIV_BALL_GUID
   for (const product of discoveryResult.data) {
     try {
       const parsedBall = await parseMotivBallPage(product.url);
-      parsedBalls.push(parsedBall);
+      parsedBalls.push(normalizeMotivCatalogBall(parsedBall));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown parse error";
