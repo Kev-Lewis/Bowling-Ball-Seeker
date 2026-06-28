@@ -17,6 +17,7 @@ import { priceChangeRoutes } from "./routes/priceChangeRoutes";
 import { alertRoutes } from "./routes/alertRoutes";
 import { dealRoutes } from "./routes/dealRoutes";
 import { trackedRetailerSourceRoutes } from "./routes/trackedRetailerSourceRoutes";
+import { retailerReviewItemRoutes } from "./routes/retailerReviewItemRoutes";
 import { catalogBallAdminRoutes } from "./routes/catalogBallAdminRoutes";
 import { trackedManufacturerSourceRoutes } from "./routes/trackedManufacturerSourceRoutes";
 
@@ -53,6 +54,7 @@ app.use("/api/price-changes", priceChangeRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/deals", dealRoutes);
 app.use("/api/tracked-retailer-sources", trackedRetailerSourceRoutes);
+app.use("/api/retailer-review-items", retailerReviewItemRoutes);
 app.use("/api/admin/catalog-balls", catalogBallAdminRoutes);
 app.use("/api/tracked-manufacturer-sources", trackedManufacturerSourceRoutes);
 

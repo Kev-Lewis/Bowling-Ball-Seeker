@@ -8,6 +8,7 @@ import {
   type ListingMatchCandidate,
 } from "../services/listingMatchService";
 import { upsertRetailerListingWithSnapshot } from "../services/retailerListingService";
+import { upsertRetailerReviewItems } from "../services/retailerReviewItemService";
 import {
   completeScrapeRun,
   failScrapeRun,
@@ -364,6 +365,7 @@ export async function runMockRetailerScrapeJob(
     const snapshotCreatedCount = countCreatedSnapshots(results);
     const snapshotSkippedCount = countSkippedSnapshots(results);
     const skippedListingReviews = buildSkippedListingReviews(results);
+    const persistedReviewItems = await upsertRetailerReviewItems(skippedListingReviews);
 
     const jobResult = {
       jobName: "mock_retailer_scrape_job",
@@ -382,6 +384,7 @@ export async function runMockRetailerScrapeJob(
       snapshotCreatedCount,
       snapshotSkippedCount,
       skippedListingReviews,
+      persistedReviewItemCount: persistedReviewItems.upsertedCount,
       results,
     };
 
@@ -465,6 +468,7 @@ export async function runBowlingComProductScrapeJob(
     const snapshotCreatedCount = countCreatedSnapshots(results);
     const snapshotSkippedCount = countSkippedSnapshots(results);
     const skippedListingReviews = buildSkippedListingReviews(results);
+    const persistedReviewItems = await upsertRetailerReviewItems(skippedListingReviews);
 
     const jobResult = {
       jobName: "bowling_com_product_scrape_job",
@@ -484,6 +488,7 @@ export async function runBowlingComProductScrapeJob(
       snapshotCreatedCount,
       snapshotSkippedCount,
       skippedListingReviews,
+      persistedReviewItemCount: persistedReviewItems.upsertedCount,
       results,
     };
 
@@ -586,6 +591,7 @@ export async function runBowlingComCategoryScrapeJob(
     const snapshotCreatedCount = countCreatedSnapshots(results);
     const snapshotSkippedCount = countSkippedSnapshots(results);
     const skippedListingReviews = buildSkippedListingReviews(results);
+    const persistedReviewItems = await upsertRetailerReviewItems(skippedListingReviews);
 
     const jobResult = {
       jobName: "bowling_com_category_scrape_job",

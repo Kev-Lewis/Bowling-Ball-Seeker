@@ -179,3 +179,34 @@ model TrackedManufacturerSource {
   @@index([parserKey])
   @@index([enabled])
 }
+
+model RetailerReviewItem {
+  id                    String   @id
+  retailerName          String
+  retailerType          String?
+  listingTitle          String
+  listingUrl            String   @unique
+  condition             String?
+  scrapeStatus          String
+  reviewStatus          String   @default("pending")
+  reviewReason          String?
+  currentPrice          Float?
+  stockStatus           String?
+  selectedBallId        String?
+  selectedBallName      String?
+  selectedBrand         String?
+  selectedCatalogState  String?
+  selectedConfidence    Int?
+  selectedMatchStatus   String?
+  topMatchesJson        String?
+  firstSeenAt           DateTime @default(now())
+  lastSeenAt            DateTime @default(now())
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([retailerName])
+  @@index([scrapeStatus])
+  @@index([reviewStatus])
+  @@index([reviewReason])
+  @@index([lastSeenAt])
+}

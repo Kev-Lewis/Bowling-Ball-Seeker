@@ -5387,3 +5387,583 @@ loadListings();
     };
   }
 })();
+
+/* Persistent retailer legacy review queue */
+(function setupRetailerReviewQueueV1() {
+  if (window.__retailerReviewQueueV1) return;
+  window.__retailerReviewQueueV1 = true;
+
+  let lastRetailerReviewItems = [];
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function ensureStyles() {
+    if (document.getElementById("retailerReviewQueueStylesV1")) return;
+
+    const style = document.createElement("style");
+    style.id = "retailerReviewQueueStylesV1";
+    style.textContent = `
+      #retailerReviewQueueV1 {
+        margin-top: 18px;
+      }
+
+      #retailerReviewQueueV1 .review-queue-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(285px, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      #retailerReviewQueueV1 .review-queue-card {
+        border: 1px solid #dbe7f5;
+        border-radius: 14px;
+        padding: 14px;
+        background: #fbfdff;
+      }
+
+      #retailerReviewQueueV1 .review-queue-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      #retailerReviewQueueV1 .review-queue-title {
+        font-weight: 800;
+        line-height: 1.3;
+      }
+
+      #retailerReviewQueueV1 .review-queue-price {
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      #retailerReviewQueueV1 .review-queue-meta {
+        display: grid;
+        grid-template-columns: 95px 1fr;
+        gap: 6px 10px;
+        font-size: 13px;
+      }
+
+      #retailerReviewQueueV1 .review-queue-meta .label {
+        color: #64748b;
+        font-weight: 700;
+      }
+
+      #retailerReviewQueueV1 .review-queue-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      #retailerReviewQueueV1 .review-queue-reason {
+        overflow-wrap: anywhere;
+      }
+
+      #retailerReviewQueueV1 .review-queue-filter-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+        align-items: end;
+      }
+
+      #retailerReviewQueueV1 .review-queue-counts {
+        margin-top: 10px;
+        color: #64748b;
+        font-size: 13px;
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function findMount() {
+    return (
+      document.getElementById("matchReview") ||
+      document.getElementById("match-review") ||
+      document.querySelector('[data-tab="matchReview"]') ||
+      document.querySelector('[data-section="matchReview"]') ||
+      document.querySelector("main") ||
+      document.body
+    );
+  }
+
+  function ensurePanel() {
+    ensureStyles();
+
+    let panel = document.getElementById("retailerReviewQueueV1");
+    if (panel) return panel;
+
+    panel = document.createElement("section");
+    panel.id = "retailerReviewQueueV1";
+    panel.className = "card";
+    panel.innerHTML = `
+      <h2>Retailer Legacy Review Queue</h2>
+      <p class="muted">
+        Persistent queue for retailer-only, legacy, spare, colorway, and weak family-match listings.
+      </p>
+
+      <div class="review-queue-filter-row">
+        <div>
+          <label for="retailerReviewQueueStatusV1">Review Status</label>
+          <select id="retailerReviewQueueStatusV1">
+            <option value="pending">pending</option>
+            <option value="reviewed">reviewed</option>
+            <option value="ignored">ignored</option>
+            <option value="retailer_only">retailer_only</option>
+            <option value="any">any</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="retailerReviewQueueReasonV1">Reason</label>
+          <select id="retailerReviewQueueReasonV1">
+            <option value="any">any</option>
+            <option value="current_family_spare_or_colorway_variant">current_family_spare_or_colorway_variant</option>
+            <option value="retailer_only_legacy_or_discontinued">retailer_only_legacy_or_discontinued</option>
+            <option value="weak_current_family_variant">weak_current_family_variant</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="retailerReviewQueueSearchV1">Search</label>
+          <input id="retailerReviewQueueSearchV1" placeholder="Motiv Liberty, Venom, etc." />
+        </div>
+
+        <div>
+          <button type="button" id="retailerReviewQueueLoadBtnV1">Load Queue</button>
+        </div>
+      </div>
+
+      <div class="review-queue-counts" id="retailerReviewQueueCountsV1"></div>
+      <div class="review-queue-grid" id="retailerReviewQueueRowsV1"></div>
+    `;
+
+    findMount().appendChild(panel);
+
+    document
+      .getElementById("retailerReviewQueueLoadBtnV1")
+      ?.addEventListener("click", loadRetailerReviewQueue);
+
+    return panel;
+  }
+
+  function getFilterValue(id) {
+    return document.getElementById(id)?.value?.trim() ?? "";
+  }
+
+  async function setRetailerReviewStatus(id, reviewStatus) {
+    await apiGet(
+      `/api/retailer-review-items/set-status?id=${encodeURIComponent(
+        id
+      )}&reviewStatus=${encodeURIComponent(reviewStatus)}`
+    );
+
+    await loadRetailerReviewQueue();
+  }
+
+  function renderRetailerReviewQueue(data) {
+    const counts = document.getElementById("retailerReviewQueueCountsV1");
+    const rows = document.getElementById("retailerReviewQueueRowsV1");
+
+    if (!rows) return;
+
+    const items = data.items ?? [];
+    lastRetailerReviewItems = items;
+
+    if (counts) {
+      const statusText = (data.countsByStatus ?? [])
+        .map((row) => `${row.reviewStatus}: ${row._count?.id ?? 0}`)
+        .join(" • ");
+
+      const reasonText = (data.countsByReason ?? [])
+        .map((row) => `${row.reviewReason}: ${row._count?.id ?? 0}`)
+        .join(" • ");
+
+      counts.textContent = `Showing ${data.count ?? items.length} item(s). Status: ${statusText || "none"}. Reasons: ${reasonText || "none"}.`;
+    }
+
+    if (items.length === 0) {
+      rows.innerHTML = `<p class="muted">No review items found.</p>`;
+      return;
+    }
+
+    rows.innerHTML = items
+      .map((item) => {
+        const selected = item.selectedBallName
+          ? `${item.selectedBrand ?? ""} ${item.selectedBallName}`.trim()
+          : "—";
+
+        return `
+          <article class="review-queue-card">
+            <div class="review-queue-head">
+              <div class="review-queue-title">${escapeHtml(item.listingTitle)}</div>
+              <div class="review-queue-price">$${escapeHtml(item.currentPrice ?? "—")}</div>
+            </div>
+
+            <div class="review-queue-meta">
+              <div class="label">Status</div>
+              <div>${escapeHtml(item.reviewStatus)}</div>
+
+              <div class="label">Reason</div>
+              <div class="review-queue-reason">${escapeHtml(item.reviewReason ?? "—")}</div>
+
+              <div class="label">Scrape</div>
+              <div>${escapeHtml(item.scrapeStatus)}</div>
+
+              <div class="label">Stock</div>
+              <div>${escapeHtml(item.stockStatus ?? "—")}</div>
+
+              <div class="label">Candidate</div>
+              <div>${escapeHtml(selected)}</div>
+
+              <div class="label">Catalog</div>
+              <div>${escapeHtml(item.selectedCatalogState ?? "—")}</div>
+
+              <div class="label">Confidence</div>
+              <div>${escapeHtml(item.selectedConfidence ?? "—")}</div>
+
+              <div class="label">Seen</div>
+              <div>${escapeHtml(item.lastSeenAt ?? "—")}</div>
+            </div>
+
+            <div class="review-queue-actions">
+              <button type="button" onclick="setRetailerReviewStatusV1('${escapeHtml(item.id)}', 'reviewed')">Reviewed</button>
+              <button type="button" class="secondary" onclick="setRetailerReviewStatusV1('${escapeHtml(item.id)}', 'retailer_only')">Retailer Only</button>
+              <button type="button" class="secondary" onclick="setRetailerReviewStatusV1('${escapeHtml(item.id)}', 'ignored')">Ignore</button>
+              <a class="button secondary" href="${escapeHtml(item.listingUrl)}" target="_blank" rel="noreferrer">Open Listing</a>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  window.renderRetailerReviewQueueV1 = renderRetailerReviewQueue;
+
+  async function loadRetailerReviewQueue() {
+    ensurePanel();
+
+    const reviewStatus = getFilterValue("retailerReviewQueueStatusV1") || "pending";
+    const reviewReason = getFilterValue("retailerReviewQueueReasonV1") || "any";
+    const q = getFilterValue("retailerReviewQueueSearchV1");
+
+    const query = encodeQuery({
+      reviewStatus,
+      reviewReason,
+      q,
+      limit: 100,
+    });
+
+    const response = await apiGet(`/api/retailer-review-items?${query}`);
+    renderRetailerReviewQueue(response.data ?? {});
+  }
+
+  window.loadRetailerReviewQueueV1 = loadRetailerReviewQueue;
+  window.setRetailerReviewStatusV1 = setRetailerReviewStatus;
+
+  document.addEventListener("DOMContentLoaded", () => {
+    ensurePanel();
+  });
+
+  setTimeout(() => {
+    ensurePanel();
+  }, 500);
+})();
+
+/* Retailer legacy review queue V2: robust response handling + layout containment */
+(function setupRetailerReviewQueueV2() {
+  if (window.__retailerReviewQueueV2) return;
+  window.__retailerReviewQueueV2 = true;
+
+  function ensureStyles() {
+    if (document.getElementById("retailerReviewQueueStylesV2")) return;
+
+    const style = document.createElement("style");
+    style.id = "retailerReviewQueueStylesV2";
+    style.textContent = `
+      #retailerReviewQueueV1 {
+        max-width: 100%;
+        overflow: hidden;
+        box-sizing: border-box;
+      }
+
+      #retailerReviewQueueV1 * {
+        box-sizing: border-box;
+      }
+
+      #retailerReviewQueueV1 .review-queue-filter-row {
+        grid-template-columns: minmax(150px, 1fr) minmax(220px, 1fr) minmax(220px, 1fr) auto;
+        max-width: 100%;
+      }
+
+      #retailerReviewQueueV1 .review-queue-grid {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        max-width: 100%;
+        overflow: hidden;
+      }
+
+      #retailerReviewQueueV1 .review-queue-card {
+        min-width: 0;
+        overflow: hidden;
+      }
+
+      #retailerReviewQueueV1 .review-queue-title,
+      #retailerReviewQueueV1 .review-queue-reason,
+      #retailerReviewQueueV1 .review-queue-meta div {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      #retailerReviewQueueV1 .review-queue-actions a,
+      #retailerReviewQueueV1 .review-queue-actions button {
+        max-width: 100%;
+        white-space: normal;
+      }
+
+      #retailerReviewQueueV1 .review-queue-error {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border: 1px solid #fecaca;
+        border-radius: 12px;
+        background: #fef2f2;
+        color: #991b1b;
+        font-size: 13px;
+      }
+
+      @media (max-width: 780px) {
+        #retailerReviewQueueV1 .review-queue-filter-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  function normalizeQueueResponse(response) {
+    return response?.data?.items
+      ? response.data
+      : response?.items
+        ? response
+        : {
+            count: 0,
+            countsByStatus: [],
+            countsByReason: [],
+            items: [],
+          };
+  }
+
+  function getFilterValue(id, fallback) {
+    const value = document.getElementById(id)?.value?.trim();
+    return value || fallback;
+  }
+
+  async function loadRetailerReviewQueueV2() {
+    ensureStyles();
+
+    const counts = document.getElementById("retailerReviewQueueCountsV1");
+    const rows = document.getElementById("retailerReviewQueueRowsV1");
+
+    if (counts) counts.textContent = "Loading retailer review queue...";
+    if (rows) rows.innerHTML = "";
+
+    try {
+      const reviewStatus = getFilterValue("retailerReviewQueueStatusV1", "pending");
+      const reviewReason = getFilterValue("retailerReviewQueueReasonV1", "any");
+      const q = getFilterValue("retailerReviewQueueSearchV1", "");
+
+      const query = encodeQuery({
+        reviewStatus,
+        reviewReason,
+        q,
+        limit: 100,
+      });
+
+      const response = await apiGet(`/api/retailer-review-items?${query}`);
+      const data = normalizeQueueResponse(response);
+
+      if (typeof renderRetailerReviewQueue === "function") {
+        renderRetailerReviewQueue(data);
+        return;
+      }
+
+      if (typeof window.renderRetailerReviewQueueV1 === "function") {
+        window.renderRetailerReviewQueueV1(data);
+        return;
+      }
+
+      if (counts) {
+        counts.textContent = `Loaded ${data.count ?? data.items?.length ?? 0} item(s).`;
+      }
+    } catch (error) {
+      if (counts) counts.textContent = "Queue load failed.";
+
+      if (rows) {
+        rows.innerHTML = `
+          <div class="review-queue-error">
+            ${String(error?.message ?? error)}
+          </div>
+        `;
+      }
+    }
+  }
+
+  function setPendingDefault() {
+    const status = document.getElementById("retailerReviewQueueStatusV1");
+    if (status && status.value === "any") {
+      status.value = "pending";
+    }
+  }
+
+  const oldLoad = window.loadRetailerReviewQueueV1;
+  window.loadRetailerReviewQueueV1 = async function loadRetailerReviewQueueV2Public() {
+    setPendingDefault();
+    await loadRetailerReviewQueueV2();
+  };
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const button = event.target?.closest?.("#retailerReviewQueueLoadBtnV1");
+
+      if (!button) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      setPendingDefault();
+      loadRetailerReviewQueueV2();
+    },
+    true
+  );
+
+  setTimeout(() => {
+    ensureStyles();
+    setPendingDefault();
+
+    const panel = document.getElementById("retailerReviewQueueV1");
+    if (panel && oldLoad) {
+      loadRetailerReviewQueueV2();
+    }
+  }, 750);
+})();
+
+/* Retailer legacy review queue V3: fit inside admin container */
+(function setupRetailerReviewQueueLayoutV3() {
+  if (window.__retailerReviewQueueLayoutV3) return;
+  window.__retailerReviewQueueLayoutV3 = true;
+
+  const style = document.createElement("style");
+  style.id = "retailerReviewQueueLayoutV3";
+  style.textContent = `
+    #retailerReviewQueueV1 {
+      width: 100%;
+      max-width: 100%;
+      margin-left: 0;
+      margin-right: 0;
+      padding: 18px;
+      overflow: hidden;
+    }
+
+    #retailerReviewQueueV1 .review-queue-filter-row {
+      display: grid;
+      grid-template-columns: minmax(150px, 220px) minmax(220px, 1fr) minmax(220px, 1.25fr) auto;
+      gap: 10px;
+      align-items: end;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    #retailerReviewQueueV1 .review-queue-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    #retailerReviewQueueV1 .review-queue-card {
+      min-width: 0;
+      width: 100%;
+      max-width: 100%;
+      padding: 14px;
+      overflow: hidden;
+    }
+
+    #retailerReviewQueueV1 .review-queue-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 10px;
+    }
+
+    #retailerReviewQueueV1 .review-queue-title {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      word-break: normal;
+    }
+
+    #retailerReviewQueueV1 .review-queue-price {
+      white-space: nowrap;
+    }
+
+    #retailerReviewQueueV1 .review-queue-meta {
+      grid-template-columns: 86px minmax(0, 1fr);
+      min-width: 0;
+    }
+
+    #retailerReviewQueueV1 .review-queue-meta div {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    #retailerReviewQueueV1 .review-queue-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    #retailerReviewQueueV1 .review-queue-actions button,
+    #retailerReviewQueueV1 .review-queue-actions a {
+      flex: 0 1 auto;
+      max-width: 100%;
+    }
+
+    @media (max-width: 1180px) {
+      #retailerReviewQueueV1 .review-queue-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 780px) {
+      #retailerReviewQueueV1 {
+        padding: 14px;
+      }
+
+      #retailerReviewQueueV1 .review-queue-filter-row {
+        grid-template-columns: 1fr;
+      }
+
+      #retailerReviewQueueV1 .review-queue-grid {
+        grid-template-columns: 1fr;
+      }
+
+      #retailerReviewQueueV1 .review-queue-head {
+        grid-template-columns: 1fr;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+})();
