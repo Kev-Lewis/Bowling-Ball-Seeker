@@ -1,17 +1,8 @@
-node_modules
-dist
+node_modules/
+dist/
 .env
-.DS_Store
-*.log
-
-# local data/dev db
-data/*.db
-data/*.sqlite
-# Scraper debug/page dumps
-*-page*.html
-*.page.html
-debug-html/
-scrape-debug/
+.env.*
+!.env.example
 
 # Local SQLite databases
 *.db
@@ -21,7 +12,7 @@ prisma/*.db
 prisma/*.sqlite
 prisma/*.sqlite3
 
-# Local API/debug responses
+# Generated scraper/debug artifacts
 *-source.json
 *-run.json
 sources.json
@@ -31,3 +22,5 @@ daily-manufacturer-sync.json
 *.page.html
 brunswick-page-debug.html
 storm-page*.html
+debug-html/
+scrape-debug/
